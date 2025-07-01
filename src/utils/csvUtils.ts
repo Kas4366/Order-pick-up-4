@@ -1,5 +1,5 @@
 import { Order } from '../types/Order';
-import { CsvColumnMapping, CsvField } from '../types/Csv';
+import { CsvColumnMapping, CsvField, SkuImageMap } from '../types/Csv';
 
 /**
  * Robust CSV parser that handles quoted fields, commas within quotes, and newlines
@@ -67,15 +67,88 @@ function parseCsv(csvText: string): string[][] {
 }
 
 /**
+ * Parses a SKU-Image CSV file and returns a map of SKU to image URL.
+ * Expected format: First column = SKU, Second column = Image URL
+ *
+ * @param file The SKU-Image CSV file to parse.
+ * @returns A Promise that resolves to a SkuImageMap object.
+ */
+export const parseSkuImageCsv = async (file: File): Promise<SkuImageMap> => {
+  console.log('🖼️ Starting SKU-Image CSV parsing:', file.name);
+  
+  const text = await file.text();
+  const allRows = parseCsv(text);
+
+  console.log(`📄 SKU-Image CSV file has ${allRows.length} rows (including header)`);
+
+  if (allRows.length === 0) {
+    console.warn('⚠️ SKU-Image CSV file is empty');
+    return {};
+  }
+
+  // Skip header row if it exists
+  const dataRows = allRows.length > 1 && 
+    (allRows[0][0]?.toLowerCase().includes('sku') || allRows[0][1]?.toLowerCase().includes('image'))
+    ? allRows.slice(1) 
+    : allRows;
+
+  console.log(`📄 Processing ${dataRows.length} data rows from SKU-Image CSV`);
+
+  const skuImageMap: SkuImageMap = {};
+  let processedCount = 0;
+
+  for (let i = 0; i < dataRows.length; i++) {
+    const values = dataRows[i];
+    const rowNumber = i + (allRows.length > dataRows.length ? 2 : 1); // Account for header
+    
+    if (values.length < 2) {
+      console.warn(`⚠️ Skipping row ${rowNumber} - insufficient columns (need at least 2)`);
+      continue;
+    }
+
+    const sku = values[0]?.trim();
+    const imageUrl = values[1]?.trim();
+
+    if (!sku || !imageUrl) {
+      console.warn(`⚠️ Skipping row ${rowNumber} - missing SKU or image URL`);
+      continue;
+    }
+
+    // Validate that the image URL looks like a URL
+    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://') && !imageUrl.startsWith('data:')) {
+      console.warn(`⚠️ Row ${rowNumber} - image URL doesn't look like a valid URL: ${imageUrl.substring(0, 50)}...`);
+      // Still add it in case it's a relative URL or other valid format
+    }
+
+    skuImageMap[sku] = imageUrl;
+    processedCount++;
+
+    console.log(`✅ Row ${rowNumber}: Mapped SKU "${sku}" to image URL`);
+  }
+
+  console.log(`✅ Successfully processed ${processedCount} SKU-Image mappings from ${dataRows.length} rows`);
+  console.log(`📊 Sample mappings:`, Object.keys(skuImageMap).slice(0, 5).map(sku => ({ sku, hasUrl: !!skuImageMap[sku] })));
+
+  return skuImageMap;
+};
+
+/**
  * Parses a CSV file and returns an array of Order objects based on the provided column mappings.
  * Groups orders by order number and customer name, preserving the original CSV order.
+ * Uses SKU-Image map as fallback for image URLs.
  *
  * @param file The CSV file to parse.
  * @param mappings An object mapping Order properties to CSV column headers.
+ * @param skuImageMap Optional map of SKU to image URL for fallback.
  * @returns A Promise that resolves to an array of Order objects.
  */
-export const parseCsvFile = async (file: File, mappings: CsvColumnMapping): Promise<Order[]> => {
+export const parseCsvFile = async (
+  file: File, 
+  mappings: CsvColumnMapping, 
+  skuImageMap?: SkuImageMap
+): Promise<Order[]> => {
   console.log('🔍 Starting CSV parsing with mappings:', mappings);
+  console.log('🖼️ SKU-Image map available:', !!skuImageMap, skuImageMap ? `(${Object.keys(skuImageMap).length} entries)` : '');
   
   const text = await file.text();
   const allRows = parseCsv(text);
@@ -111,6 +184,7 @@ export const parseCsvFile = async (file: File, mappings: CsvColumnMapping): Prom
   // Process all data rows (skip header)
   const dataRows = allRows.slice(1);
   const rawOrders: any[] = [];
+  let imageUrlFallbackCount = 0;
 
   for (let i = 0; i < dataRows.length; i++) {
     const values = dataRows[i];
@@ -142,7 +216,7 @@ export const parseCsvFile = async (file: File, mappings: CsvColumnMapping): Prom
     const quantityStr = extractValue('quantity');
     const location = extractValue('location');
     const buyerPostcode = extractValue('buyerPostcode');
-    const imageUrl = extractValue('imageUrl');
+    let imageUrl = extractValue('imageUrl'); // Get from CSV first
     const remainingStockStr = extractValue('remainingStock');
 
     console.log(`🔍 Row ${rowNumber} extracted values:`, {
@@ -188,6 +262,18 @@ export const parseCsvFile = async (file: File, mappings: CsvColumnMapping): Prom
       continue;
     }
 
+    // Handle image URL fallback logic
+    if (!imageUrl && skuImageMap && sku) {
+      const fallbackImageUrl = skuImageMap[sku];
+      if (fallbackImageUrl) {
+        imageUrl = fallbackImageUrl;
+        imageUrlFallbackCount++;
+        console.log(`🖼️ Row ${rowNumber}: Using fallback image URL for SKU "${sku}"`);
+      } else {
+        console.log(`🖼️ Row ${rowNumber}: No fallback image URL found for SKU "${sku}"`);
+      }
+    }
+
     // Parse quantity and remaining stock
     const quantity = quantityStr ? Math.max(1, parseInt(quantityStr, 10) || 1) : 1;
     const remainingStock = remainingStockStr ? parseInt(remainingStockStr, 10) : undefined;
@@ -213,11 +299,13 @@ export const parseCsvFile = async (file: File, mappings: CsvColumnMapping): Prom
       location: location || 'Unknown',
       buyerPostcode: buyerPostcode ? buyerPostcode.replace(/\s/g, '') : '',
       hasImageUrl: !!imageUrl,
+      imageSource: !extractValue('imageUrl') && imageUrl ? 'fallback' : 'csv',
       remainingStock: remainingStock
     });
   }
 
   console.log(`📊 Collected ${rawOrders.length} valid orders from ${dataRows.length} CSV rows`);
+  console.log(`🖼️ Used fallback image URLs for ${imageUrlFallbackCount} orders`);
 
   if (rawOrders.length === 0) {
     console.error('❌ No valid orders found in CSV. Check your column mappings and ensure the CSV has data rows.');
@@ -285,6 +373,7 @@ export const parseCsvFile = async (file: File, mappings: CsvColumnMapping): Prom
   }
 
   console.log(`✅ Successfully processed ${finalOrders.length} final orders`);
+  console.log(`🖼️ Final image URL statistics: ${finalOrders.filter(o => !!o.imageUrl).length} orders have images (${imageUrlFallbackCount} from fallback)`);
 
   // Log summary
   const customerCounts = new Map<string, number>();
@@ -299,6 +388,8 @@ export const parseCsvFile = async (file: File, mappings: CsvColumnMapping): Prom
   console.log(`  📋 Total orders: ${finalOrders.length}`);
   console.log(`  👥 Unique customers: ${customerCounts.size}`);
   console.log(`  🔢 Unique order numbers: ${orderCounts.size}`);
+  console.log(`  🖼️ Orders with images: ${finalOrders.filter(o => !!o.imageUrl).length}`);
+  console.log(`  🖼️ Images from fallback: ${imageUrlFallbackCount}`);
   
   // Show customers with multiple items
   for (const [customer, count] of customerCounts.entries()) {

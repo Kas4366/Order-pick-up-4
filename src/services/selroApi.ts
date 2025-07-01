@@ -35,15 +35,19 @@ class SelroApiService {
     // Build the Netlify Function URL
     const functionUrl = new URL('/.netlify/functions/getSelroOrders', window.location.origin);
     
-    // Add parameters
+    // Add parameters with improved defaults for recent orders
     functionUrl.searchParams.set('endpoint', endpoint);
+    functionUrl.searchParams.set('pagesize', '100'); // Increased page size
+    functionUrl.searchParams.set('sortBy', 'created'); // Sort by creation date
+    functionUrl.searchParams.set('sortOrder', 'desc'); // Most recent first
+    
     if (additionalParams) {
       Object.entries(additionalParams).forEach(([key, value]) => {
         functionUrl.searchParams.set(key, value);
       });
     }
     
-    const maskedUrl = functionUrl.toString();
+    const maskedUrl = functionUrl.toString().replace(/key=[^&]+/, 'key=***').replace(/secret=[^&]+/, 'secret=***');
     console.log('🔗 Making request via Netlify Function:', maskedUrl);
     
     try {
@@ -110,6 +114,9 @@ API Secret format should be: app4_secret[uuid]`);
         if (responseData.orders && Array.isArray(responseData.orders)) {
           console.log('✅ Found orders array with', responseData.orders.length, 'orders');
         }
+        if (responseData._metadata) {
+          console.log('📊 Request metadata:', responseData._metadata);
+        }
       }
       
       return responseData;
@@ -136,7 +143,7 @@ API Secret format should be: app4_secret[uuid]`);
       
       // Test with a small request to verify connection
       const response = await this.makeNetlifyFunctionRequest('orders', { 
-        pagesize: '1' 
+        pagesize: '5' // Small test request
       });
       
       console.log('✅ Selro API connection test successful via Netlify Function');
@@ -157,7 +164,7 @@ API Secret format should be: app4_secret[uuid]`);
           id: 'all',
           name: 'All Orders',
           orderCount: 0,
-          description: 'All available orders from Selro'
+          description: 'All available orders from Selro (last 30 days)'
         },
         {
           id: 'PCK Picked',
@@ -197,7 +204,7 @@ API Secret format should be: app4_secret[uuid]`);
           console.log(`🔍 Checking order count for folder: ${folder.name}`);
           
           const params: Record<string, string> = { 
-            pagesize: '1'
+            pagesize: '5' // Small request just to check count
           };
           
           // Add tag parameter for non-"all" folders
@@ -211,7 +218,7 @@ API Secret format should be: app4_secret[uuid]`);
           let orderCount = 0;
           if (ordersResponse && Array.isArray(ordersResponse.orders)) {
             orderCount = ordersResponse.orders.length;
-            console.log(`📊 Folder "${folder.name}" has ${orderCount} orders`);
+            console.log(`📊 Folder "${folder.name}" has ${orderCount} orders (sample)`);
           } else if (ordersResponse && typeof ordersResponse.total === 'number') {
             orderCount = ordersResponse.total;
             console.log(`📊 Folder "${folder.name}" total: ${orderCount}`);
@@ -225,13 +232,18 @@ API Secret format should be: app4_secret[uuid]`);
         }
       }
       
-      // Filter out folders with 0 orders (except "All Orders")
+      // Always include "All Orders" even if others have 0 orders
       const availableFolders = commonFolders.filter(folder => 
         folder.id === 'all' || folder.orderCount > 0
       );
       
-      console.log(`✅ Found ${availableFolders.length} available folders`);
-      return availableFolders;
+      // Ensure "All Orders" is always first
+      const allOrdersFolder = availableFolders.find(f => f.id === 'all');
+      const otherFolders = availableFolders.filter(f => f.id !== 'all');
+      const sortedFolders = allOrdersFolder ? [allOrdersFolder, ...otherFolders] : availableFolders;
+      
+      console.log(`✅ Found ${sortedFolders.length} available folders`);
+      return sortedFolders;
     } catch (error) {
       console.error('❌ Error setting up folders:', error);
       
@@ -240,17 +252,19 @@ API Secret format should be: app4_secret[uuid]`);
         id: 'all',
         name: 'All Orders',
         orderCount: 0,
-        description: 'All available orders from Selro'
+        description: 'All available orders from Selro (last 30 days)'
       }];
     }
   }
 
   async getOrdersByTag(tag: string): Promise<Order[]> {
     try {
-      console.log(`🔍 Fetching orders from Selro API with tag: "${tag}"`);
+      console.log(`🔍 Fetching recent orders from Selro API with tag: "${tag}"`);
       
       const params: Record<string, string> = {
-        pagesize: '50' // Increase page size for better performance
+        pagesize: '100', // Increased page size for better coverage
+        sortBy: 'created',
+        sortOrder: 'desc' // Most recent first
       };
       
       // Add tag parameter if not "all"
@@ -263,6 +277,11 @@ API Secret format should be: app4_secret[uuid]`);
       
       console.log('📦 Raw orders response type:', typeof ordersData);
       console.log('📦 Raw orders response keys:', Object.keys(ordersData || {}));
+      
+      // Log metadata if available
+      if (ordersData._metadata) {
+        console.log('📊 Request metadata:', ordersData._metadata);
+      }
       
       // Handle the actual Selro response format based on the documentation
       let orders: any[] = [];
@@ -282,6 +301,13 @@ API Secret format should be: app4_secret[uuid]`);
       
       console.log(`📦 Found ${orders.length} orders from Selro API for tag "${tag}"`);
       
+      // Sort orders by creation date (most recent first) if not already sorted
+      orders.sort((a, b) => {
+        const dateA = new Date(a.created || a.createdAt || a.orderDate || 0);
+        const dateB = new Date(b.created || b.createdAt || b.orderDate || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
+      
       // Convert Selro orders to our Order format based on the actual API response structure
       const convertedOrders: Order[] = [];
       
@@ -290,6 +316,7 @@ API Secret format should be: app4_secret[uuid]`);
         console.log(`🔍 Processing order ${i + 1}/${orders.length}:`, {
           id: selroOrder.id,
           orderId: selroOrder.orderId,
+          created: selroOrder.created || selroOrder.createdAt,
           buyerName: selroOrder.buyerName,
           shipName: selroOrder.shipName,
           channelSalesCount: selroOrder.channelSales?.length || 0,
@@ -342,7 +369,8 @@ API Secret format should be: app4_secret[uuid]`);
             quantity: order.quantity,
             location: order.location,
             hasImage: !!order.imageUrl,
-            tag: tag
+            tag: tag,
+            created: selroOrder.created || selroOrder.createdAt
           });
 
           convertedOrders.push(order);
@@ -350,6 +378,8 @@ API Secret format should be: app4_secret[uuid]`);
       }
       
       console.log(`✅ Successfully converted ${convertedOrders.length} order items for tag "${tag}"`);
+      console.log(`📅 Date range: ${orders.length > 0 ? `${orders[orders.length - 1]?.created || 'unknown'} to ${orders[0]?.created || 'unknown'}` : 'no orders'}`);
+      
       return convertedOrders;
     } catch (error) {
       console.error('❌ Error fetching orders from Selro:', error);
@@ -381,10 +411,12 @@ API Secret format should be: app4_secret[uuid]`);
 
   async searchOrdersByCustomer(customerName: string, tag?: string): Promise<Order[]> {
     try {
-      console.log(`🔍 Searching orders for customer: ${customerName} in tag: ${tag || 'all'}`);
+      console.log(`🔍 Searching recent orders for customer: ${customerName} in tag: ${tag || 'all'}`);
       
       const params: Record<string, string> = {
-        pagesize: '50'
+        pagesize: '100',
+        sortBy: 'created',
+        sortOrder: 'desc'
       };
       
       // Add tag parameter if provided

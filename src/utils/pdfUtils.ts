@@ -61,30 +61,94 @@ export const parseHtmlContent = async (
         }
       }
 
-      // Extract remaining stock information from HTML
+      // Extract remaining stock information from HTML - IMPROVED LOGIC
       let remainingStock: number | undefined = undefined;
       
       // Try to find stock information in various possible locations
       const stockCells = orderDetails.querySelectorAll('td');
-      for (const cell of stockCells) {
-        const cellText = cell.textContent?.toLowerCase() || '';
-        
-        // Look for patterns like "Stock: 15", "Available: 8", "Remaining: 12", etc.
-        const stockMatch = cellText.match(/(?:stock|available|remaining|on hand|inventory):\s*(\d+)/i);
-        if (stockMatch) {
-          remainingStock = parseInt(stockMatch[1], 10);
-          console.log(`📦 Found remaining stock for ${sku}: ${remainingStock}`);
-          break;
+      
+      // First, look for explicit "Stock Remaining" column or similar headers
+      const headerRow = detailsTable.querySelector('tr:first-child');
+      let stockColumnIndex = -1;
+      
+      if (headerRow) {
+        const headers = headerRow.querySelectorAll('td, th');
+        headers.forEach((header, index) => {
+          const headerText = header.textContent?.toLowerCase() || '';
+          if (headerText.includes('stock remaining') || 
+              headerText.includes('remaining stock') || 
+              headerText.includes('stock level') ||
+              headerText.includes('available stock') ||
+              headerText.includes('on hand') ||
+              headerText.includes('inventory')) {
+            stockColumnIndex = index;
+            console.log(`📦 Found stock column at index ${index}: "${header.textContent}"`);
+          }
+        });
+      }
+      
+      // If we found a stock column, extract from that specific column
+      if (stockColumnIndex >= 0 && stockCells[stockColumnIndex]) {
+        const stockText = stockCells[stockColumnIndex].textContent?.trim() || '';
+        const stockValue = parseInt(stockText, 10);
+        if (!isNaN(stockValue)) {
+          remainingStock = stockValue;
+          console.log(`📦 Found remaining stock from column ${stockColumnIndex} for ${sku}: ${remainingStock}`);
+        } else if (stockText === '0' || stockText === '') {
+          remainingStock = 0; // Explicitly handle zero stock
+          console.log(`📦 Found zero stock from column ${stockColumnIndex} for ${sku}: ${remainingStock}`);
         }
-        
-        // Also check for standalone numbers in cells that might represent stock
-        if (cellText.match(/^\s*\d+\s*$/) && !cellText.includes(quantityText)) {
-          const potentialStock = parseInt(cellText.trim(), 10);
-          if (potentialStock > quantity) { // Only consider if it's more than the order quantity
-            remainingStock = potentialStock;
-            console.log(`📦 Inferred remaining stock for ${sku}: ${remainingStock}`);
+      }
+      
+      // Fallback: search all cells for stock patterns
+      if (remainingStock === undefined) {
+        for (const cell of stockCells) {
+          const cellText = cell.textContent?.toLowerCase() || '';
+          
+          // Look for patterns like "Stock: 15", "Available: 8", "Remaining: 12", etc.
+          const stockMatch = cellText.match(/(?:stock|available|remaining|on hand|inventory):\s*(\d+)/i);
+          if (stockMatch) {
+            remainingStock = parseInt(stockMatch[1], 10);
+            console.log(`📦 Found remaining stock pattern for ${sku}: ${remainingStock}`);
+            break;
+          }
+          
+          // Look for standalone numbers that might represent stock
+          const numberMatch = cellText.match(/^\s*(\d+)\s*$/);
+          if (numberMatch && cellText !== quantityText) {
+            const potentialStock = parseInt(numberMatch[1], 10);
+            // Only consider if it's different from the order quantity
+            if (potentialStock !== quantity) {
+              remainingStock = potentialStock;
+              console.log(`📦 Inferred remaining stock for ${sku}: ${remainingStock}`);
+              break;
+            }
+          }
+          
+          // Handle explicit zero values
+          if (cellText.trim() === '0' && cellText !== quantityText) {
+            remainingStock = 0;
+            console.log(`📦 Found explicit zero stock for ${sku}: ${remainingStock}`);
+            break;
           }
         }
+      }
+      
+      // If still no stock found, check if there's a pattern in the entire row text
+      if (remainingStock === undefined) {
+        const rowText = orderDetails.textContent || '';
+        const stockPattern = rowText.match(/stock[:\s]*(\d+)/i);
+        if (stockPattern) {
+          remainingStock = parseInt(stockPattern[1], 10);
+          console.log(`📦 Found stock in row text for ${sku}: ${remainingStock}`);
+        }
+      }
+      
+      // Log final stock result
+      if (remainingStock !== undefined) {
+        console.log(`✅ Final remaining stock for ${sku}: ${remainingStock}`);
+      } else {
+        console.log(`⚠️ No remaining stock found for ${sku}`);
       }
       
       // Extract the image URL and handle local file paths

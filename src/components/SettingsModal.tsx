@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X, Upload, Server, FileText, Volume2, Package, Warehouse } from 'lucide-react';
+import { Settings, X, Upload, Server, FileText, Volume2, Package, Warehouse, Tag } from 'lucide-react';
 import { FileWithImages } from '../types/Settings';
 import { SelroSettings } from './SelroSettings';
 import { VeeqoSettings } from './VeeqoSettings';
 import { CsvSettings } from './CsvSettings';
 import { VoiceSettingsComponent } from './VoiceSettings';
 import { StockTrackingTab } from './StockTrackingTab';
+import { CustomTagSettings } from './CustomTagSettings';
 import { CsvColumnMapping } from '../types/Csv';
 import { VoiceSettings } from '../types/VoiceSettings';
 import { StockTrackingItem } from '../types/StockTracking';
+import { CustomTag } from '../types/CustomTags';
+import { SkuImageCsvInfo } from '../types/Csv';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -30,6 +33,17 @@ interface SettingsModalProps {
   stockTrackingItems: StockTrackingItem[];
   onRemoveStockItem: (sku: string, markedDate: string) => void;
   onClearAllStockItems: () => void;
+  // Custom tags props
+  customTags?: CustomTag[];
+  onSaveCustomTags?: (tags: CustomTag[]) => void;
+  selectedSelroTag?: string;
+  selectedVeeqoTag?: string;
+  onSelectSelroTag?: (tagName: string) => void;
+  onSelectVeeqoTag?: (tagName: string) => void;
+  // SKU-Image CSV props
+  skuImageCsvInfo?: SkuImageCsvInfo | null;
+  onSkuImageCsvUpload?: (file: File) => Promise<SkuImageCsvInfo>;
+  onClearSkuImageCsv?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -52,14 +66,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   stockTrackingItems,
   onRemoveStockItem,
   onClearAllStockItems,
+  customTags = [],
+  onSaveCustomTags = () => {},
+  selectedSelroTag,
+  selectedVeeqoTag,
+  onSelectSelroTag = () => {},
+  onSelectVeeqoTag = () => {},
+  skuImageCsvInfo,
+  onSkuImageCsvUpload,
+  onClearSkuImageCsv,
 }) => {
-  const [activeTab, setActiveTab] = useState<'selro' | 'veeqo' | 'files' | 'csv' | 'voice' | 'stock'>('selro');
+  const [activeTab, setActiveTab] = useState<'tags' | 'selro' | 'veeqo' | 'files' | 'csv' | 'voice' | 'stock'>('tags');
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <Settings className="h-5 w-5 text-gray-600" />
@@ -76,6 +99,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Tab Navigation */}
         <div className="border-b border-gray-200">
           <nav className="flex overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('tags')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === 'tags'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Tag className="h-4 w-4" />
+                Custom Tags
+              </div>
+            </button>
             <button
               onClick={() => setActiveTab('selro')}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -163,6 +199,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+          {activeTab === 'tags' && (
+            <CustomTagSettings
+              customTags={customTags}
+              onSaveTags={onSaveCustomTags}
+              selectedSelroTag={selectedSelroTag}
+              selectedVeeqoTag={selectedVeeqoTag}
+              onSelectSelroTag={onSelectSelroTag}
+              onSelectVeeqoTag={onSelectVeeqoTag}
+            />
+          )}
+
           {activeTab === 'selro' && (
             <SelroSettings
               onFolderSelect={onSelroFolderSelect || (() => {})}
@@ -192,6 +239,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               onCsvUpload={onCsvUpload}
               onSaveMappings={onSaveCsvMappings}
               savedMappings={savedCsvMappings}
+              skuImageCsvInfo={skuImageCsvInfo}
+              onSkuImageCsvUpload={onSkuImageCsvUpload}
+              onClearSkuImageCsv={onClearSkuImageCsv}
             />
           )}
 

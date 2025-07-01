@@ -32,13 +32,24 @@ exports.handler = async function (event, context) {
   try {
     // Parse query parameters for additional options
     const queryParams = event.queryStringParameters || {};
-    const pagesize = queryParams.pagesize || '20';
+    const pagesize = queryParams.pagesize || '100'; // Increased default page size
     const page = queryParams.page || '1';
     const endpoint = queryParams.endpoint || 'orders';
-    const tag = queryParams.tag; // New parameter for tag filtering
+    const tag = queryParams.tag; // Tag filtering parameter
+    const sortBy = queryParams.sortBy || 'created'; // Sort by creation date
+    const sortOrder = queryParams.sortOrder || 'desc'; // Most recent first
 
-    // Build the Selro API URL
+    // Build the Selro API URL with improved parameters
     let url = `https://api.selro.com/4/${endpoint}?key=${API_KEY}&secret=${API_SECRET}&pagesize=${pagesize}&page=${page}`;
+    
+    // Add sorting to get most recent orders first
+    url += `&sortby=${sortBy}&sortorder=${sortOrder}`;
+    
+    // Add date filter to get recent orders (last 30 days by default)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const dateFilter = thirtyDaysAgo.toISOString().split('T')[0]; // YYYY-MM-DD format
+    url += `&createdfrom=${dateFilter}`;
     
     // Add tag filter if provided
     if (tag && tag !== 'all' && tag !== 'All Orders') {
@@ -93,6 +104,16 @@ exports.handler = async function (event, context) {
       };
     }
 
+    // Log response details for debugging
+    console.log('Selro API Response Summary:', {
+      hasOrders: !!(data.orders),
+      orderCount: data.orders ? data.orders.length : 0,
+      totalCount: data.total || 'unknown',
+      currentPage: data.page || page,
+      pageSize: data.pagesize || pagesize,
+      hasMorePages: data.hasmore || false
+    });
+
     // If tag filtering is requested but the API doesn't support it directly,
     // we need to filter the results on the server side
     if (tag && tag !== 'all' && tag !== 'All Orders' && data.orders) {
@@ -112,7 +133,9 @@ exports.handler = async function (event, context) {
           order.customField2,
           order.customField3,
           order.processingFolder,
-          order.status
+          order.status,
+          order.orderStatus,
+          order.notes
         ].filter(Boolean); // Remove null/undefined values
         
         // Convert all tags to strings and check for matches
@@ -136,7 +159,19 @@ exports.handler = async function (event, context) {
       console.log(`Filtered ${originalCount} orders down to ${data.orders.length} orders with tag "${tag}"`);
     }
 
-    console.log('Successfully fetched and filtered data from Selro API');
+    // Add metadata about the request for debugging
+    data._metadata = {
+      requestedAt: new Date().toISOString(),
+      pageSize: pagesize,
+      page: page,
+      sortBy: sortBy,
+      sortOrder: sortOrder,
+      dateFilter: dateFilter,
+      tag: tag || 'none',
+      filteredCount: data.orders ? data.orders.length : 0
+    };
+
+    console.log('Successfully fetched and processed data from Selro API');
 
     return {
       statusCode: 200,

@@ -1,11 +1,24 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { MapPin, Box, Check, Volume2, VolumeX, Package, User, Hash, AlertTriangle } from 'lucide-react';
+import { MapPin, Box, Check, Volume2, VolumeX, Package, User, Hash, AlertTriangle, Clock } from 'lucide-react';
 import { Order } from '../types/Order';
 import { VoiceSettings } from '../types/VoiceSettings';
 import { StockTrackingItem } from '../types/StockTracking';
 
+interface NextSkuNeeds {
+  sku: string;
+  totalQuantity: number;
+  orderCount: number;
+  orders: Array<{
+    orderNumber: string;
+    customerName: string;
+    quantity: number;
+  }>;
+}
+
 interface OrderDisplayProps {
   order: Order;
+  orders?: Order[];
+  currentOrderIndex?: number;
   onOrderComplete?: (order: Order) => void;
   voiceSettings: VoiceSettings;
   onMarkForReorder: (order: Order) => void;
@@ -15,6 +28,8 @@ interface OrderDisplayProps {
 
 export const OrderDisplay: React.FC<OrderDisplayProps> = ({ 
   order, 
+  orders = [],
+  currentOrderIndex = -1,
   onOrderComplete, 
   voiceSettings, 
   onMarkForReorder,
@@ -35,6 +50,45 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
       item.orderNumber === order.orderNumber
     );
   }, [stockTrackingItems, order.sku, order.orderNumber]);
+
+  // Calculate next orders with same SKU
+  const nextSkuNeeds = useMemo((): NextSkuNeeds | null => {
+    if (currentOrderIndex < 0 || currentOrderIndex >= orders.length - 1) {
+      return null;
+    }
+
+    const currentSku = order.sku;
+    const remainingOrders = orders.slice(currentOrderIndex + 1);
+    
+    const matchingOrders = remainingOrders.filter(o => o.sku === currentSku);
+    
+    if (matchingOrders.length === 0) {
+      return null;
+    }
+
+    const totalQuantity = matchingOrders.reduce((sum, o) => sum + o.quantity, 0);
+    const uniqueOrders = new Map<string, { orderNumber: string; customerName: string; quantity: number }>();
+    
+    matchingOrders.forEach(o => {
+      const key = `${o.orderNumber}-${o.customerName}`;
+      if (uniqueOrders.has(key)) {
+        uniqueOrders.get(key)!.quantity += o.quantity;
+      } else {
+        uniqueOrders.set(key, {
+          orderNumber: o.orderNumber,
+          customerName: o.customerName,
+          quantity: o.quantity
+        });
+      }
+    });
+
+    return {
+      sku: currentSku,
+      totalQuantity,
+      orderCount: uniqueOrders.size,
+      orders: Array.from(uniqueOrders.values())
+    };
+  }, [order.sku, orders, currentOrderIndex]);
   
   // Set the order's completed status
   useEffect(() => {
@@ -227,7 +281,7 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
       <div className="p-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2">
-            <div className="w-full bg-gray-100 rounded-lg overflow-hidden relative" style={{ minHeight: '400px', maxHeight: '600px' }}>
+            <div className="w-full bg-gray-100 rounded-lg overflow-hidden relative flex items-center justify-center" style={{ minHeight: '300px' }}>
               {order.imageUrl && !imageError ? (
                 <>
                   {imageLoading && (
@@ -239,7 +293,7 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                     ref={imageRef}
                     src={order.imageUrl} 
                     alt={`Product image for ${order.sku}`}
-                    className={`w-full h-full object-contain transition-opacity duration-300 ${
+                    className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${
                       imageLoading ? 'opacity-0' : 'opacity-100'
                     }`}
                     onLoad={handleImageLoad}
@@ -247,7 +301,7 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                   />
                 </>
               ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                <div className="flex flex-col items-center justify-center text-gray-400 p-8">
                   <Box className="h-20 w-20 mb-2" />
                   <p className="text-sm text-center px-4">
                     {imageError ? 'Image not found' : 'No image available'}
@@ -314,6 +368,44 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
               </div>
             </div>
 
+            {/* Next Orders with Same SKU */}
+            {nextSkuNeeds && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <Clock className="h-5 w-5 text-orange-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h4 className="text-sm font-medium text-orange-800 mb-2">Upcoming Orders - Same SKU</h4>
+                    <div className="space-y-2">
+                      <div className="bg-orange-100 rounded p-2">
+                        <p className="text-sm font-medium text-orange-900">
+                          {nextSkuNeeds.totalQuantity} more units needed
+                        </p>
+                        <p className="text-xs text-orange-700">
+                          Across {nextSkuNeeds.orderCount} upcoming order{nextSkuNeeds.orderCount !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <div className="space-y-1 max-h-24 overflow-y-auto">
+                        {nextSkuNeeds.orders.slice(0, 3).map((upcomingOrder, index) => (
+                          <div key={index} className="text-xs text-orange-700 bg-white rounded px-2 py-1">
+                            <span className="font-medium">#{upcomingOrder.orderNumber}</span> - {upcomingOrder.customerName} 
+                            <span className="text-orange-600 ml-1">(Qty: {upcomingOrder.quantity})</span>
+                          </div>
+                        ))}
+                        {nextSkuNeeds.orders.length > 3 && (
+                          <div className="text-xs text-orange-600 text-center">
+                            +{nextSkuNeeds.orders.length - 3} more orders
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-orange-600 italic">
+                        💡 Consider picking extra units for efficiency
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Low Stock Warning - Only shown when stock is low */}
             {showLowStockWarning && (
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
@@ -362,7 +454,9 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                 <p>Buyer Postcode: {order.buyerPostcode || 'Not extracted'}</p>
                 <p>Remaining Stock: {order.remainingStock !== undefined ? order.remainingStock : 'Not available'}</p>
                 <p>Tracked for reorder: {currentTrackedItem ? 'Yes' : 'No'}</p>
+                <p>Next SKU needs: {nextSkuNeeds ? `${nextSkuNeeds.totalQuantity} units in ${nextSkuNeeds.orderCount} orders` : 'None'}</p>
                 {order.selroOrderId && <p>Selro Order ID: {order.selroOrderId}</p>}
+                {order.veeqoOrderId && <p>Veeqo Order ID: {order.veeqoOrderId}</p>}
               </div>
             )}
           </div>

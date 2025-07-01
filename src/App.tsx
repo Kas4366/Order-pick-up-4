@@ -43,6 +43,17 @@ function App() {
     loadOrdersFromSelro,
     loadOrdersFromVeeqo,
     handleOrderComplete,
+    // Custom tags
+    customTags,
+    saveCustomTags,
+    selectedSelroTag,
+    selectedVeeqoTag,
+    handleSelectSelroTag,
+    handleSelectVeeqoTag,
+    // SKU-Image CSV
+    skuImageCsvInfo,
+    handleSkuImageCsvUpload,
+    clearSkuImageCsv,
   } = useOrderData();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -119,16 +130,18 @@ function App() {
 
   const getDataSourceInfo = () => {
     if (isUsingSelroApi && selectedSelroFolderName) {
+      const tagInfo = selectedSelroTag && selectedSelroTag !== 'all' ? ` (${selectedSelroTag})` : '';
       return {
         icon: <Server className="h-4 w-4" />,
-        text: `Selro: ${selectedSelroFolderName}`,
+        text: `Selro: ${selectedSelroFolderName}${tagInfo}`,
         color: 'text-blue-600'
       };
     } else if (isUsingVeeqoApi && selectedVeeqoStatus) {
       const warehouseText = selectedVeeqoWarehouseId ? ' (Specific Warehouse)' : ' (All Warehouses)';
+      const tagInfo = selectedVeeqoTag && selectedVeeqoTag !== 'all' ? ` (${selectedVeeqoTag})` : '';
       return {
         icon: <Warehouse className="h-4 w-4" />,
-        text: `Veeqo: ${selectedVeeqoStatus}${warehouseText}`,
+        text: `Veeqo: ${selectedVeeqoStatus}${warehouseText}${tagInfo}`,
         color: 'text-purple-600'
       };
     }
@@ -240,7 +253,9 @@ function App() {
             
             {currentOrder ? (
               <OrderDisplay 
-                order={currentOrder} 
+                order={currentOrder}
+                orders={orders}
+                currentOrderIndex={currentOrderIndex}
                 onOrderComplete={handleOrderComplete}
                 voiceSettings={voiceSettings}
                 onMarkForReorder={handleMarkForReorder}
@@ -274,6 +289,15 @@ function App() {
         stockTrackingItems={stockTrackingItems}
         onRemoveStockItem={removeStockTrackingItem}
         onClearAllStockItems={clearAllStockTrackingItems}
+        customTags={customTags}
+        onSaveCustomTags={saveCustomTags}
+        selectedSelroTag={selectedSelroTag}
+        selectedVeeqoTag={selectedVeeqoTag}
+        onSelectSelroTag={handleSelectSelroTag}
+        onSelectVeeqoTag={handleSelectVeeqoTag}
+        skuImageCsvInfo={skuImageCsvInfo}
+        onSkuImageCsvUpload={handleSkuImageCsvUpload}
+        onClearSkuImageCsv={clearSkuImageCsv}
       />
     </Layout>
   );

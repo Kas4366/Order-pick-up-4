@@ -15,3 +15,15 @@ export const defaultCsvColumnMapping: CsvColumnMapping = {
   imageUrl: 'Image URL',
   remainingStock: 'Remaining Stock',
 };
+
+// New interface for SKU-Image mapping
+export interface SkuImageMap {
+  [sku: string]: string; // Maps SKU to image URL
+}
+
+// Interface for SKU-Image CSV file info
+export interface SkuImageCsvInfo {
+  fileName: string;
+  uploadedAt: string;
+  skuCount: number;
+}

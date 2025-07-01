@@ -4,10 +4,11 @@ import { simulatePdfParsing } from '../utils/pdfUtils';
 import { FileWithImages } from '../types/Settings';
 import { selroApi } from '../services/selroApi';
 import { veeqoApi } from '../services/veeqoApi';
-import { CsvColumnMapping, defaultCsvColumnMapping } from '../types/Csv';
+import { CsvColumnMapping, defaultCsvColumnMapping, SkuImageMap, SkuImageCsvInfo } from '../types/Csv';
 import { VoiceSettings, defaultVoiceSettings } from '../types/VoiceSettings';
 import { StockTrackingItem } from '../types/StockTracking';
-import { parseCsvFile } from '../utils/csvUtils';
+import { CustomTag, defaultCustomTags } from '../types/CustomTags';
+import { parseCsvFile, parseSkuImageCsv } from '../utils/csvUtils';
 
 export const useOrderData = () => {
   const [pdfUploaded, setPdfUploaded] = useState(false);
@@ -23,6 +24,15 @@ export const useOrderData = () => {
   const [csvColumnMappings, setCsvColumnMappings] = useState<CsvColumnMapping>(defaultCsvColumnMapping);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(defaultVoiceSettings);
   const [stockTrackingItems, setStockTrackingItems] = useState<StockTrackingItem[]>([]);
+  
+  // Custom tags state
+  const [customTags, setCustomTags] = useState<CustomTag[]>(defaultCustomTags);
+  const [selectedSelroTag, setSelectedSelroTag] = useState<string>('all');
+  const [selectedVeeqoTag, setSelectedVeeqoTag] = useState<string>('all');
+
+  // SKU-Image CSV state
+  const [skuImageMap, setSkuImageMap] = useState<SkuImageMap>({});
+  const [skuImageCsvInfo, setSkuImageCsvInfo] = useState<SkuImageCsvInfo | null>(null);
 
   // Load saved settings on component mount
   useEffect(() => {
@@ -89,6 +99,57 @@ export const useOrderData = () => {
       }
     }
 
+    // Load saved custom tags
+    const savedCustomTags = localStorage.getItem('customTags');
+    if (savedCustomTags) {
+      try {
+        const parsedCustomTags = JSON.parse(savedCustomTags);
+        console.log('🏷️ Loaded saved custom tags from localStorage:', parsedCustomTags);
+        setCustomTags(parsedCustomTags);
+      } catch (e) {
+        console.error('Failed to parse saved custom tags, using default:', e);
+        setCustomTags(defaultCustomTags);
+      }
+    }
+
+    // Load saved tag selections
+    const savedSelroTag = localStorage.getItem('selectedSelroTag');
+    const savedVeeqoTag = localStorage.getItem('selectedVeeqoTag');
+    
+    if (savedSelroTag) {
+      setSelectedSelroTag(savedSelroTag);
+    }
+    
+    if (savedVeeqoTag) {
+      setSelectedVeeqoTag(savedVeeqoTag);
+    }
+
+    // Load saved SKU-Image map and info
+    const savedSkuImageMap = localStorage.getItem('skuImageMap');
+    const savedSkuImageCsvInfo = localStorage.getItem('skuImageCsvInfo');
+    
+    if (savedSkuImageMap) {
+      try {
+        const parsedSkuImageMap = JSON.parse(savedSkuImageMap);
+        console.log('🖼️ Loaded saved SKU-Image map from localStorage:', Object.keys(parsedSkuImageMap).length, 'entries');
+        setSkuImageMap(parsedSkuImageMap);
+      } catch (e) {
+        console.error('Failed to parse saved SKU-Image map, using empty:', e);
+        setSkuImageMap({});
+      }
+    }
+    
+    if (savedSkuImageCsvInfo) {
+      try {
+        const parsedSkuImageCsvInfo = JSON.parse(savedSkuImageCsvInfo);
+        console.log('🖼️ Loaded saved SKU-Image CSV info from localStorage:', parsedSkuImageCsvInfo);
+        setSkuImageCsvInfo(parsedSkuImageCsvInfo);
+      } catch (e) {
+        console.error('Failed to parse saved SKU-Image CSV info, using null:', e);
+        setSkuImageCsvInfo(null);
+      }
+    }
+
     // Check if APIs are configured
     const selroConfig = selroApi.getConfig();
     const veeqoConfig = veeqoApi.getConfig();
@@ -114,6 +175,71 @@ export const useOrderData = () => {
     }
   }, [currentOrder, orders]);
 
+  // Custom tags management
+  const saveCustomTags = (tags: CustomTag[]) => {
+    console.log('🏷️ Saving custom tags to localStorage:', tags);
+    setCustomTags(tags);
+    localStorage.setItem('customTags', JSON.stringify(tags));
+  };
+
+  const handleSelectSelroTag = (tagName: string) => {
+    console.log('🏷️ Selected Selro tag:', tagName);
+    setSelectedSelroTag(tagName);
+    localStorage.setItem('selectedSelroTag', tagName);
+    
+    // Auto-load orders if Selro is connected and a folder is selected
+    if (isUsingSelroApi && selectedSelroFolderId) {
+      loadOrdersFromSelro(tagName === 'all' ? undefined : tagName);
+    }
+  };
+
+  const handleSelectVeeqoTag = (tagName: string) => {
+    console.log('🏷️ Selected Veeqo tag:', tagName);
+    setSelectedVeeqoTag(tagName);
+    localStorage.setItem('selectedVeeqoTag', tagName);
+    
+    // Auto-load orders if Veeqo is connected and a status is selected
+    if (isUsingVeeqoApi && selectedVeeqoStatus) {
+      loadOrdersFromVeeqo(selectedVeeqoStatus, selectedVeeqoWarehouseId, tagName === 'all' ? undefined : tagName);
+    }
+  };
+
+  // SKU-Image CSV management
+  const handleSkuImageCsvUpload = async (file: File) => {
+    try {
+      console.log('🖼️ Processing SKU-Image CSV file:', file.name);
+      
+      const newSkuImageMap = await parseSkuImageCsv(file);
+      const newCsvInfo: SkuImageCsvInfo = {
+        fileName: file.name,
+        uploadedAt: new Date().toISOString(),
+        skuCount: Object.keys(newSkuImageMap).length
+      };
+
+      setSkuImageMap(newSkuImageMap);
+      setSkuImageCsvInfo(newCsvInfo);
+
+      // Save to localStorage
+      localStorage.setItem('skuImageMap', JSON.stringify(newSkuImageMap));
+      localStorage.setItem('skuImageCsvInfo', JSON.stringify(newCsvInfo));
+
+      console.log(`✅ Successfully loaded ${newCsvInfo.skuCount} SKU-Image mappings from ${file.name}`);
+      
+      return newCsvInfo;
+    } catch (error) {
+      console.error('❌ Error processing SKU-Image CSV file:', error);
+      throw error;
+    }
+  };
+
+  const clearSkuImageCsv = () => {
+    setSkuImageMap({});
+    setSkuImageCsvInfo(null);
+    localStorage.removeItem('skuImageMap');
+    localStorage.removeItem('skuImageCsvInfo');
+    console.log('🖼️ Cleared SKU-Image CSV data');
+  };
+
   // Handle Selro folder selection
   const handleSelroFolderSelect = async (folderId: string, folderName: string) => {
     try {
@@ -127,7 +253,8 @@ export const useOrderData = () => {
       console.log(`Selected Selro folder: ${folderName} (${folderId})`);
       
       // Automatically load orders from the selected folder using tag filtering
-      await loadOrdersFromSelro(folderName);
+      const tagToUse = selectedSelroTag === 'all' ? undefined : selectedSelroTag;
+      await loadOrdersFromSelro(tagToUse);
     } catch (error) {
       console.error('Error selecting Selro folder:', error);
       alert('Failed to load orders from the selected folder. Please try again.');
@@ -147,21 +274,22 @@ export const useOrderData = () => {
       console.log(`Selected Veeqo status: ${status}, warehouse: ${warehouseId || 'all'}`);
       
       // Automatically load orders from Veeqo
-      await loadOrdersFromVeeqo(status, warehouseId);
+      const tagToUse = selectedVeeqoTag === 'all' ? undefined : selectedVeeqoTag;
+      await loadOrdersFromVeeqo(status, warehouseId, tagToUse);
     } catch (error) {
       console.error('Error selecting Veeqo status:', error);
       alert('Failed to load orders from Veeqo. Please try again.');
     }
   };
 
-  // Load orders from Selro API
+  // Load orders from Selro API with tag filtering
   const loadOrdersFromSelro = async (tag?: string) => {
     try {
-      const tagToUse = tag || selectedSelroFolderName || 'all';
+      const tagToUse = tag || (selectedSelroTag === 'all' ? undefined : selectedSelroTag);
       
-      console.log(`Loading orders from Selro with tag: ${tagToUse}`);
+      console.log(`Loading orders from Selro with tag: ${tagToUse || 'none'}`);
       
-      const selroOrders = await selroApi.getOrdersByTag(tagToUse);
+      const selroOrders = await selroApi.getOrdersByTag(tagToUse || 'all');
       
       setOrders(selroOrders);
       setPdfUploaded(true);
@@ -170,22 +298,39 @@ export const useOrderData = () => {
       setIsUsingSelroApi(true);
       setIsUsingVeeqoApi(false);
       
-      console.log(`Loaded ${selroOrders.length} orders from Selro with tag "${tagToUse}"`);
+      console.log(`Loaded ${selroOrders.length} orders from Selro with tag "${tagToUse || 'all'}"`);
     } catch (error) {
       console.error('Error loading orders from Selro:', error);
       throw error;
     }
   };
 
-  // Load orders from Veeqo API
-  const loadOrdersFromVeeqo = async (status?: string, warehouseId?: number) => {
+  // Load orders from Veeqo API with tag filtering
+  const loadOrdersFromVeeqo = async (status?: string, warehouseId?: number, tag?: string) => {
     try {
       const statusToUse = status || selectedVeeqoStatus || 'allocated';
       const warehouseToUse = warehouseId !== undefined ? warehouseId : selectedVeeqoWarehouseId;
+      const tagToUse = tag || (selectedVeeqoTag === 'all' ? undefined : selectedVeeqoTag);
       
-      console.log(`Loading orders from Veeqo with status: ${statusToUse}, warehouse: ${warehouseToUse || 'all'}`);
+      console.log(`Loading orders from Veeqo with status: ${statusToUse}, warehouse: ${warehouseToUse || 'all'}, tag: ${tagToUse || 'none'}`);
       
-      const veeqoOrders = await veeqoApi.getOrdersByStatus(statusToUse, warehouseToUse);
+      let veeqoOrders = await veeqoApi.getOrdersByStatus(statusToUse, warehouseToUse);
+      
+      // Apply client-side tag filtering if a tag is specified
+      if (tagToUse) {
+        const originalCount = veeqoOrders.length;
+        veeqoOrders = veeqoOrders.filter(order => {
+          // Check if the order contains the tag in various fields
+          const orderText = JSON.stringify(order).toLowerCase();
+          const tagLower = tagToUse.toLowerCase();
+          
+          return orderText.includes(tagLower) || 
+                 order.additionalDetails?.toLowerCase().includes(tagLower) ||
+                 order.customerName.toLowerCase().includes(tagLower);
+        });
+        
+        console.log(`Filtered ${originalCount} orders down to ${veeqoOrders.length} orders with tag "${tagToUse}"`);
+      }
       
       setOrders(veeqoOrders);
       setPdfUploaded(true);
@@ -235,15 +380,17 @@ export const useOrderData = () => {
     }
   };
 
-  // Handle CSV file upload
+  // Handle CSV file upload with SKU-Image fallback
   const handleCsvFileUpload = async (file: File, mappings: CsvColumnMapping) => {
     try {
       console.log('🚀 Processing CSV file:', file.name, 'with mappings:', mappings);
+      console.log('🖼️ Using SKU-Image map with', Object.keys(skuImageMap).length, 'entries');
       
       // Ensure mappings are saved before processing
       saveCsvMappings(mappings);
       
-      const parsedOrders = await parseCsvFile(file, mappings);
+      // Pass the SKU-Image map to the CSV parser for fallback image URLs
+      const parsedOrders = await parseCsvFile(file, mappings, skuImageMap);
 
       if (parsedOrders.length === 0) {
         throw new Error('No orders found in the uploaded CSV file. Please check your column mappings and ensure the CSV has data rows.');
@@ -412,8 +559,9 @@ export const useOrderData = () => {
     try {
       if (isUsingSelroApi && selectedSelroFolderName) {
         // Search using Selro API with tag filtering
-        console.log(`Searching Selro for: ${searchTerm} in tag: ${selectedSelroFolderName}`);
-        const searchResults = await selroApi.searchOrdersByCustomer(searchTerm, selectedSelroFolderName);
+        const tagToUse = selectedSelroTag === 'all' ? undefined : selectedSelroTag;
+        console.log(`Searching Selro for: ${searchTerm} with tag: ${tagToUse || 'none'}`);
+        const searchResults = await selroApi.searchOrdersByCustomer(searchTerm, tagToUse || 'all');
         
         if (searchResults.length > 0) {
           setCurrentOrder(searchResults[0]);
@@ -563,5 +711,17 @@ export const useOrderData = () => {
     loadOrdersFromSelro,
     loadOrdersFromVeeqo,
     handleOrderComplete,
+    // Custom tags functionality
+    customTags,
+    saveCustomTags,
+    selectedSelroTag,
+    selectedVeeqoTag,
+    handleSelectSelroTag,
+    handleSelectVeeqoTag,
+    // SKU-Image CSV functionality
+    skuImageMap,
+    skuImageCsvInfo,
+    handleSkuImageCsvUpload,
+    clearSkuImageCsv,
   };
 };
