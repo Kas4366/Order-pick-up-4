@@ -14,6 +14,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
 }) => {
   const [searchInput, setSearchInput] = useState('');
   const [searchMode, setSearchMode] = useState<'manual' | 'scanner' | 'arrows'>('manual');
+  const [lastScannedPostcode, setLastScannedPostcode] = useState('');
 
   // Listen for barcode scanner input and arrow key navigation
   useEffect(() => {
@@ -48,20 +49,26 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
 
       if (e.key === 'Enter') {
         if (buffer) {
-          // Clear the search input and set the new scanned data
-          setSearchInput('');
+          console.log('📱 Detected QR code scan:', buffer);
           
-          // Check if this looks like QR code data (longer, multi-line format)
-          if (buffer.length > 20 && (buffer.includes('\n') || buffer.includes('JGB') || buffer.includes('GB'))) {
-            console.log('📱 Detected QR code scan:', buffer);
+          // Extract postcode from QR data
+          const extractedPostcode = extractPostcodeFromQRData(buffer);
+          
+          if (extractedPostcode) {
+            console.log('📮 Extracted postcode from QR scan:', extractedPostcode);
+            setSearchInput(extractedPostcode);
+            setLastScannedPostcode(extractedPostcode);
+            
+            // Automatically search for orders with this postcode
+            onCustomerSearch(extractedPostcode);
+          } else {
+            console.log('⚠️ No valid postcode found in QR data');
+            // Still call the QR scan handler for backward compatibility
             if (onQRCodeScan) {
               onQRCodeScan(buffer);
             }
-          } else {
-            // Treat as customer name search
-            console.log('🔍 Detected customer search:', buffer);
-            onCustomerSearch(buffer);
           }
+          
           buffer = '';
         }
       } else {
@@ -75,23 +82,31 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [onCustomerSearch, onQRCodeScan, onArrowNavigation, searchMode]);
 
+  // Extract postcodes from QR code data
+  const extractPostcodeFromQRData = (qrData: string): string => {
+    // UK postcode regex pattern
+    const postcodeRegex = /\b([A-Z]{1,2}[0-9][A-Z0-9]?\s?[0-9][A-Z]{2})\b/g;
+    const matches = qrData.match(postcodeRegex) || [];
+    
+    // Known sender postcodes to filter out
+    const KNOWN_SENDER_POSTCODES = ['LU56RT', 'LU33RZ'];
+    
+    const validPostcodes = matches
+      .map(match => match.replace(/\s/g, '').toUpperCase()) // Normalize postcodes
+      .filter(postcode => 
+        !KNOWN_SENDER_POSTCODES.some(sender => 
+          postcode.startsWith(sender) || sender.startsWith(postcode.substring(0, 4))
+        )
+      );
+    
+    // Return the first valid postcode found
+    return validPostcodes[0] || '';
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchInput.trim()) {
-      if (searchInput.length > 20 && (searchInput.includes('\n') || searchInput.includes('JGB') || searchInput.includes('GB'))) {
-        // Looks like QR code data
-        if (onQRCodeScan) {
-          onQRCodeScan(searchInput.trim());
-        }
-      } else {
-        // Regular search
-        onCustomerSearch(searchInput.trim());
-      }
-      
-      // Clear the search input after processing
-      if (searchMode === 'scanner') {
-        setSearchInput('');
-      }
+      onCustomerSearch(searchInput.trim());
     }
   };
 
@@ -101,11 +116,29 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
     
     // Auto-detect QR code data and process immediately in scanner mode
     if (searchMode === 'scanner' && value.length > 20 && (value.includes('\n') || value.includes('JGB') || value.includes('GB'))) {
-      if (onQRCodeScan) {
+      const extractedPostcode = extractPostcodeFromQRData(value);
+      
+      if (extractedPostcode) {
+        console.log('📮 Extracted postcode from manual input:', extractedPostcode);
+        setSearchInput(extractedPostcode);
+        setLastScannedPostcode(extractedPostcode);
+        onCustomerSearch(extractedPostcode);
+      } else if (onQRCodeScan) {
         onQRCodeScan(value);
       }
-      // Clear the input after processing
+    }
+  };
+
+  const handleModeChange = (newMode: 'manual' | 'scanner' | 'arrows') => {
+    setSearchMode(newMode);
+    
+    // Clear search input when switching modes, except when switching to scanner mode
+    // and we have a last scanned postcode
+    if (newMode === 'scanner' && lastScannedPostcode) {
+      setSearchInput(lastScannedPostcode);
+    } else if (newMode !== 'scanner') {
       setSearchInput('');
+      setLastScannedPostcode('');
     }
   };
 
@@ -117,7 +150,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
         <div className="flex rounded-lg border border-gray-300 overflow-hidden">
           <button
             type="button"
-            onClick={() => setSearchMode('manual')}
+            onClick={() => handleModeChange('manual')}
             className={`px-3 py-1 text-sm font-medium transition-colors flex items-center gap-1 ${
               searchMode === 'manual'
                 ? 'bg-blue-600 text-white'
@@ -129,7 +162,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setSearchMode('scanner')}
+            onClick={() => handleModeChange('scanner')}
             className={`px-3 py-1 text-sm font-medium transition-colors flex items-center gap-1 border-l border-gray-300 ${
               searchMode === 'scanner'
                 ? 'bg-blue-600 text-white'
@@ -141,7 +174,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setSearchMode('arrows')}
+            onClick={() => handleModeChange('arrows')}
             className={`px-3 py-1 text-sm font-medium transition-colors flex items-center gap-1 border-l border-gray-300 ${
               searchMode === 'arrows'
                 ? 'bg-blue-600 text-white'
@@ -166,7 +199,9 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
               searchMode === 'manual' 
                 ? "Search by customer name, order ID, or postcode..."
                 : searchMode === 'scanner'
-                ? "Scan QR code or paste QR data here..."
+                ? lastScannedPostcode 
+                  ? `Last scanned: ${lastScannedPostcode} - Scan next label...`
+                  : "Scan QR code - postcode will appear here..."
                 : "Use arrow keys to navigate orders..."
             }
             className="w-full px-4 py-2 pl-10 pr-12 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -189,14 +224,22 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
         </div>
       </form>
       
-      {/* Mode-specific instructions - Simplified */}
+      {/* Mode-specific instructions */}
       <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded-lg">
         {searchMode === 'manual' && (
           <p>Type customer name, order ID, or postcode to search</p>
         )}
         
         {searchMode === 'scanner' && (
-          <p>Automatically detects QR code scans and extracts buyer postcodes</p>
+          <div>
+            <p className="font-medium text-blue-700 mb-1">QR Scanner Mode Active</p>
+            <p>• Scan a shipping label to extract buyer postcode</p>
+            <p>• Postcode will appear in search bar and auto-search orders</p>
+            <p>• Next scan will replace current postcode</p>
+            {lastScannedPostcode && (
+              <p className="text-green-600 mt-1">✓ Last scanned: {lastScannedPostcode}</p>
+            )}
+          </div>
         )}
         
         {searchMode === 'arrows' && (

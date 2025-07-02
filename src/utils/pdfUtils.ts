@@ -13,13 +13,15 @@ export const parseHtmlContent = async (
     const parser = new DOMParser();
     const doc = parser.parseFromString(text, 'text/html');
     
-    const orders: Order[] = [];
+    const rawOrders: any[] = [];
     
     // Find all order rows (they are in pairs - header row and details row)
     const orderRows = doc.querySelectorAll('tr.shippeditem');
     console.log(`📋 Found ${orderRows.length} order rows in HTML`);
     
-    for (const row of orderRows) {
+    for (let orderIndex = 0; orderIndex < orderRows.length; orderIndex++) {
+      const row = orderRows[orderIndex];
+      
       // Get the next row which contains the order details
       const detailsRow = row.nextElementSibling;
       if (!detailsRow) continue;
@@ -28,20 +30,12 @@ export const parseHtmlContent = async (
       const detailsTable = detailsRow.querySelector('table');
       if (!detailsTable) continue;
       
-      // Find the order details row within the details table
-      const orderDetails = detailsTable.querySelector('tr.shippeditem');
-      if (!orderDetails) continue;
+      // Find all order details rows within the details table (there might be multiple items per order)
+      const orderDetailsRows = detailsTable.querySelectorAll('tr.shippeditem');
+      if (!orderDetailsRows || orderDetailsRows.length === 0) continue;
       
-      // Extract order information
-      const orderNumber = row.querySelector('td')?.textContent?.trim() || '';
-      const sku = orderDetails.querySelector('td:nth-child(2)')?.textContent?.trim().replace(/\s+/g, ' ') || '';
-      const quantityText = orderDetails.querySelector('td span strong')?.textContent?.trim() || '0';
-      const quantity = parseInt(quantityText);
-      const customerName = orderDetails.querySelector('td:nth-child(7)')?.textContent?.trim() || '';
-      
-      // Extract location from the correct cell (5th column)
-      const locationCell = orderDetails.querySelector('td:nth-child(5)');
-      const location = locationCell?.textContent?.trim() || 'Not specified';
+      // Extract order-level information from the main row
+      const orderNumber = row.querySelector('td')?.textContent?.trim() || `Order-${orderIndex + 1}`;
       
       // Extract buyer postcode from shipping address (4th column in main order row)
       const shippingAddressCell = row.querySelector('td:nth-child(4)');
@@ -60,223 +54,324 @@ export const parseHtmlContent = async (
           console.log(`⚠️ No postcode found in address for order ${orderNumber}`);
         }
       }
+      
+      console.log(`📦 Processing order ${orderNumber} with ${orderDetailsRows.length} items`);
+      
+      // Process each item in this order
+      for (let itemIndex = 0; itemIndex < orderDetailsRows.length; itemIndex++) {
+        const orderDetails = orderDetailsRows[itemIndex];
+        
+        // Extract item-specific information
+        const sku = orderDetails.querySelector('td:nth-child(2)')?.textContent?.trim().replace(/\s+/g, ' ') || `SKU-${orderNumber}-${itemIndex + 1}`;
+        const quantityText = orderDetails.querySelector('td span strong')?.textContent?.trim() || '0';
+        const quantity = parseInt(quantityText);
+        const customerName = orderDetails.querySelector('td:nth-child(7)')?.textContent?.trim() || 'Unknown Customer';
+        
+        // Extract location from the correct cell (5th column)
+        const locationCell = orderDetails.querySelector('td:nth-child(5)');
+        const location = locationCell?.textContent?.trim() || 'Not specified';
 
-      // Extract remaining stock information from HTML - IMPROVED LOGIC
-      let remainingStock: number | undefined = undefined;
-      
-      // Try to find stock information in various possible locations
-      const stockCells = orderDetails.querySelectorAll('td');
-      
-      // First, look for explicit "Stock Remaining" column or similar headers
-      const headerRow = detailsTable.querySelector('tr:first-child');
-      let stockColumnIndex = -1;
-      
-      if (headerRow) {
-        const headers = headerRow.querySelectorAll('td, th');
-        headers.forEach((header, index) => {
-          const headerText = header.textContent?.toLowerCase() || '';
-          if (headerText.includes('stock remaining') || 
-              headerText.includes('remaining stock') || 
-              headerText.includes('stock level') ||
-              headerText.includes('available stock') ||
-              headerText.includes('on hand') ||
-              headerText.includes('inventory')) {
-            stockColumnIndex = index;
-            console.log(`📦 Found stock column at index ${index}: "${header.textContent}"`);
-          }
-        });
-      }
-      
-      // If we found a stock column, extract from that specific column
-      if (stockColumnIndex >= 0 && stockCells[stockColumnIndex]) {
-        const stockText = stockCells[stockColumnIndex].textContent?.trim() || '';
-        const stockValue = parseInt(stockText, 10);
-        if (!isNaN(stockValue)) {
-          remainingStock = stockValue;
-          console.log(`📦 Found remaining stock from column ${stockColumnIndex} for ${sku}: ${remainingStock}`);
-        } else if (stockText === '0' || stockText === '') {
-          remainingStock = 0; // Explicitly handle zero stock
-          console.log(`📦 Found zero stock from column ${stockColumnIndex} for ${sku}: ${remainingStock}`);
+        // Extract remaining stock information from HTML - IMPROVED LOGIC
+        let remainingStock: number | undefined = undefined;
+        
+        // Try to find stock information in various possible locations
+        const stockCells = orderDetails.querySelectorAll('td');
+        
+        // First, look for explicit "Stock Remaining" column or similar headers
+        const headerRow = detailsTable.querySelector('tr:first-child');
+        let stockColumnIndex = -1;
+        
+        if (headerRow) {
+          const headers = headerRow.querySelectorAll('td, th');
+          headers.forEach((header, index) => {
+            const headerText = header.textContent?.toLowerCase() || '';
+            if (headerText.includes('stock remaining') || 
+                headerText.includes('remaining stock') || 
+                headerText.includes('stock level') ||
+                headerText.includes('available stock') ||
+                headerText.includes('on hand') ||
+                headerText.includes('inventory')) {
+              stockColumnIndex = index;
+              console.log(`📦 Found stock column at index ${index}: "${header.textContent}"`);
+            }
+          });
         }
-      }
-      
-      // Fallback: search all cells for stock patterns
-      if (remainingStock === undefined) {
-        for (const cell of stockCells) {
-          const cellText = cell.textContent?.toLowerCase() || '';
+        
+        // If we found a stock column, extract from that specific column
+        if (stockColumnIndex >= 0 && stockCells[stockColumnIndex]) {
+          const stockText = stockCells[stockColumnIndex].textContent?.trim() || '';
           
-          // Look for patterns like "Stock: 15", "Available: 8", "Remaining: 12", etc.
-          const stockMatch = cellText.match(/(?:stock|available|remaining|on hand|inventory):\s*(\d+)/i);
-          if (stockMatch) {
-            remainingStock = parseInt(stockMatch[1], 10);
-            console.log(`📦 Found remaining stock pattern for ${sku}: ${remainingStock}`);
-            break;
+          // Handle explicit zero values first
+          if (stockText === '0') {
+            remainingStock = 0;
+            console.log(`📦 Found explicit zero stock from column ${stockColumnIndex} for ${sku}: ${remainingStock}`);
+          } else {
+            const stockValue = parseInt(stockText, 10);
+            if (!isNaN(stockValue)) {
+              remainingStock = stockValue;
+              console.log(`📦 Found remaining stock from column ${stockColumnIndex} for ${sku}: ${remainingStock}`);
+            } else if (stockText === '') {
+              remainingStock = 0; // Empty cell means zero stock
+              console.log(`📦 Found empty stock cell (treating as zero) from column ${stockColumnIndex} for ${sku}: ${remainingStock}`);
+            }
           }
-          
-          // Look for standalone numbers that might represent stock
-          const numberMatch = cellText.match(/^\s*(\d+)\s*$/);
-          if (numberMatch && cellText !== quantityText) {
-            const potentialStock = parseInt(numberMatch[1], 10);
-            // Only consider if it's different from the order quantity
-            if (potentialStock !== quantity) {
-              remainingStock = potentialStock;
-              console.log(`📦 Inferred remaining stock for ${sku}: ${remainingStock}`);
+        }
+        
+        // Fallback: search all cells for stock patterns
+        if (remainingStock === undefined) {
+          for (const cell of stockCells) {
+            const cellText = cell.textContent?.toLowerCase() || '';
+            
+            // Look for patterns like "Stock: 15", "Available: 8", "Remaining: 12", etc.
+            const stockMatch = cellText.match(/(?:stock|available|remaining|on hand|inventory):\s*(\d+)/i);
+            if (stockMatch) {
+              remainingStock = parseInt(stockMatch[1], 10);
+              console.log(`📦 Found remaining stock pattern for ${sku}: ${remainingStock}`);
+              break;
+            }
+            
+            // Look for standalone numbers that might represent stock
+            const numberMatch = cellText.match(/^\s*(\d+)\s*$/);
+            if (numberMatch && cellText !== quantityText) {
+              const potentialStock = parseInt(numberMatch[1], 10);
+              // Only consider if it's different from the order quantity
+              if (potentialStock !== quantity) {
+                remainingStock = potentialStock;
+                console.log(`📦 Inferred remaining stock for ${sku}: ${remainingStock}`);
+                break;
+              }
+            }
+            
+            // Handle explicit zero values
+            if (cellText.trim() === '0' && cellText !== quantityText) {
+              remainingStock = 0;
+              console.log(`📦 Found explicit zero stock for ${sku}: ${remainingStock}`);
               break;
             }
           }
-          
-          // Handle explicit zero values
-          if (cellText.trim() === '0' && cellText !== quantityText) {
-            remainingStock = 0;
-            console.log(`📦 Found explicit zero stock for ${sku}: ${remainingStock}`);
-            break;
+        }
+        
+        // If still no stock found, check if there's a pattern in the entire row text
+        if (remainingStock === undefined) {
+          const rowText = orderDetails.textContent || '';
+          const stockPattern = rowText.match(/stock[:\s]*(\d+)/i);
+          if (stockPattern) {
+            remainingStock = parseInt(stockPattern[1], 10);
+            console.log(`📦 Found stock in row text for ${sku}: ${remainingStock}`);
           }
         }
-      }
-      
-      // If still no stock found, check if there's a pattern in the entire row text
-      if (remainingStock === undefined) {
-        const rowText = orderDetails.textContent || '';
-        const stockPattern = rowText.match(/stock[:\s]*(\d+)/i);
-        if (stockPattern) {
-          remainingStock = parseInt(stockPattern[1], 10);
-          console.log(`📦 Found stock in row text for ${sku}: ${remainingStock}`);
-        }
-      }
-      
-      // Log final stock result
-      if (remainingStock !== undefined) {
-        console.log(`✅ Final remaining stock for ${sku}: ${remainingStock}`);
-      } else {
-        console.log(`⚠️ No remaining stock found for ${sku}`);
-      }
-      
-      // Extract the image URL and handle local file paths
-      let imageUrl = '';
-      
-      // Try multiple ways to find the image element
-      console.log(`🔍 Looking for image element for SKU: ${sku}`);
-      
-      // Method 1: Look in the first column of the order details row
-      let imgElement = orderDetails.querySelector('td:first-child img');
-      
-      // Method 2: Look anywhere in the order details row
-      if (!imgElement) {
-        imgElement = orderDetails.querySelector('img');
-      }
-      
-      // Method 3: Look in the entire details table
-      if (!imgElement) {
-        imgElement = detailsTable.querySelector('img');
-      }
-      
-      // Method 4: Look in the entire details row
-      if (!imgElement) {
-        imgElement = detailsRow.querySelector('img');
-      }
-      
-      // Method 5: Look in the main order row
-      if (!imgElement) {
-        imgElement = row.querySelector('img');
-      }
-      
-      if (imgElement) {
-        console.log(`🖼️  Found image element for SKU ${sku}`);
-        const src = imgElement.getAttribute('src') || '';
-        console.log(`🖼️  Image src for SKU ${sku}:`, src);
         
-        if (src) {
-          if (imagesFolderHandle) {
-            console.log(`📁 Processing image with folder handle for SKU ${sku}`);
-            
-            // Handle different types of image paths
-            let filename = '';
-            
-            if (src.startsWith('./')) {
-              // Handle relative paths like "./exportpacklist4_files/image.jpg"
-              const pathParts = src.split('/');
-              filename = pathParts[pathParts.length - 1]; // Get the last part (filename)
-              console.log(`📁 Extracted filename from relative path: "${filename}"`);
-            } else if (src.startsWith('file:///')) {
-              // Handle file:// URLs - decode URI and extract filename
-              try {
-                const decodedPath = decodeURIComponent(src);
-                console.log('📁 Decoded file path:', decodedPath);
-                filename = decodedPath.split(/[\/\\]/).pop() || '';
-              } catch (error) {
-                console.warn('⚠️  Failed to decode URI:', src);
+        // Log final stock result
+        if (remainingStock !== undefined) {
+          console.log(`✅ Final remaining stock for ${sku}: ${remainingStock}`);
+        } else {
+          console.log(`⚠️ No remaining stock found for ${sku}`);
+        }
+        
+        // Extract the image URL and handle local file paths
+        let imageUrl = '';
+        
+        // Try multiple ways to find the image element
+        console.log(`🔍 Looking for image element for SKU: ${sku}`);
+        
+        // Method 1: Look in the first column of the order details row
+        let imgElement = orderDetails.querySelector('td:first-child img');
+        
+        // Method 2: Look anywhere in the order details row
+        if (!imgElement) {
+          imgElement = orderDetails.querySelector('img');
+        }
+        
+        // Method 3: Look in the entire details table
+        if (!imgElement) {
+          imgElement = detailsTable.querySelector('img');
+        }
+        
+        // Method 4: Look in the entire details row
+        if (!imgElement) {
+          imgElement = detailsRow.querySelector('img');
+        }
+        
+        // Method 5: Look in the main order row
+        if (!imgElement) {
+          imgElement = row.querySelector('img');
+        }
+        
+        if (imgElement) {
+          console.log(`🖼️  Found image element for SKU ${sku}`);
+          const src = imgElement.getAttribute('src') || '';
+          console.log(`🖼️  Image src for SKU ${sku}:`, src);
+          
+          if (src) {
+            if (imagesFolderHandle) {
+              console.log(`📁 Processing image with folder handle for SKU ${sku}`);
+              
+              // Handle different types of image paths
+              let filename = '';
+              
+              if (src.startsWith('./')) {
+                // Handle relative paths like "./exportpacklist4_files/image.jpg"
+                const pathParts = src.split('/');
+                filename = pathParts[pathParts.length - 1]; // Get the last part (filename)
+                console.log(`📁 Extracted filename from relative path: "${filename}"`);
+              } else if (src.startsWith('file:///')) {
+                // Handle file:// URLs - decode URI and extract filename
+                try {
+                  const decodedPath = decodeURIComponent(src);
+                  console.log('📁 Decoded file path:', decodedPath);
+                  filename = decodedPath.split(/[\/\\]/).pop() || '';
+                } catch (error) {
+                  console.warn('⚠️  Failed to decode URI:', src);
+                  filename = src.split(/[\/\\]/).pop() || '';
+                }
+              } else {
+                // Handle other relative paths
                 filename = src.split(/[\/\\]/).pop() || '';
               }
+              
+              // Remove any query parameters or fragments
+              filename = filename.split('?')[0].split('#')[0];
+              
+              console.log(`🔍 Looking for image file: "${filename}" in folder: "${imagesFolderHandle.name}"`);
+              
+              // Try to find the image file
+              imageUrl = await findImageFile(imagesFolderHandle, filename, sku);
+              
+              if (imageUrl) {
+                console.log(`✅ Successfully loaded image for SKU ${sku}`);
+              } else {
+                console.log(`❌ Failed to load image for SKU ${sku}`);
+              }
             } else {
-              // Handle other relative paths
-              filename = src.split(/[\/\\]/).pop() || '';
-            }
-            
-            // Remove any query parameters or fragments
-            filename = filename.split('?')[0].split('#')[0];
-            
-            console.log(`🔍 Looking for image file: "${filename}" in folder: "${imagesFolderHandle.name}"`);
-            
-            // Try to find the image file
-            imageUrl = await findImageFile(imagesFolderHandle, filename, sku);
-            
-            if (imageUrl) {
-              console.log(`✅ Successfully loaded image for SKU ${sku}`);
-            } else {
-              console.log(`❌ Failed to load image for SKU ${sku}`);
+              console.log(`⚠️  No images folder handle available for SKU ${sku} - cannot load image`);
             }
           } else {
-            console.log(`⚠️  No images folder handle available for SKU ${sku} - cannot load image`);
+            console.log(`⚠️  No src attribute found for image element for SKU ${sku}`);
           }
         } else {
-          console.log(`⚠️  No src attribute found for image element for SKU ${sku}`);
-        }
-      } else {
-        console.log(`❌ No image element found for SKU ${sku}`);
-        
-        // Debug: Let's see what's in the first cell
-        const firstCell = orderDetails.querySelector('td:first-child');
-        if (firstCell) {
-          console.log(`🔍 First cell HTML for SKU ${sku}:`, firstCell.innerHTML);
+          console.log(`❌ No image element found for SKU ${sku}`);
         }
         
-        // Debug: Let's see all cells in the order details row
-        const allCells = orderDetails.querySelectorAll('td');
-        console.log(`🔍 Order details row has ${allCells.length} cells for SKU ${sku}`);
-        allCells.forEach((cell, index) => {
-          const hasImg = cell.querySelector('img') ? '📷' : '❌';
-          console.log(`  Cell ${index + 1}: ${hasImg} ${cell.textContent?.trim().substring(0, 50)}...`);
+        // Store raw order data with original index for sorting
+        rawOrders.push({
+          orderNumber: orderNumber,
+          customerName: customerName,
+          sku: sku,
+          quantity: quantity,
+          location: location,
+          buyerPostcode: buyerPostcode,
+          imageUrl: imageUrl,
+          remainingStock: remainingStock,
+          originalIndex: orderIndex, // Use order index for grouping
+          itemIndex: itemIndex, // Track item position within order
+        });
+        
+        console.log('📦 Parsed order item:', {
+          orderNumber,
+          customerName,
+          sku,
+          quantity,
+          location,
+          buyerPostcode,
+          remainingStock,
+          hasImage: !!imageUrl,
+          itemIndex
         });
       }
-      
-      const order: Order = {
-        orderNumber,
-        customerName,
-        sku,
-        quantity,
-        location,
-        imageUrl,
-        remainingStock,
-        completed: false,
-        // Add buyer postcode for QR code matching
-        buyerPostcode
-      };
-      
-      console.log('📦 Parsed order:', {
-        orderNumber,
-        customerName,
-        sku,
-        quantity,
-        location,
-        buyerPostcode,
-        remainingStock,
-        hasImage: !!imageUrl
-      });
-      orders.push(order);
     }
     
-    console.log(`✅ Successfully parsed ${orders.length} orders`);
-    return orders;
+    console.log(`📊 Collected ${rawOrders.length} order items from ${orderRows.length} orders`);
+
+    if (rawOrders.length === 0) {
+      console.error('❌ No valid orders found in HTML.');
+      throw new Error('No valid orders found in HTML file.');
+    }
+
+    // Group by order number and customer name, then create individual order items
+    const orderGroups = new Map<string, any[]>();
+    
+    for (const rawOrder of rawOrders) {
+      // Create a grouping key based on order number AND customer name
+      const groupKey = `${rawOrder.orderNumber}_${rawOrder.customerName}`;
+      
+      if (!orderGroups.has(groupKey)) {
+        orderGroups.set(groupKey, []);
+      }
+      
+      orderGroups.get(groupKey)!.push(rawOrder);
+    }
+
+    console.log(`📊 Grouped ${rawOrders.length} order items into ${orderGroups.size} order groups`);
+
+    // Create final order objects, preserving original order and item sequence
+    const finalOrders: Order[] = [];
+    
+    // Sort groups by the minimum original index to preserve order sequence
+    const sortedGroups = Array.from(orderGroups.entries()).sort((a, b) => {
+      const minIndexA = Math.min(...a[1].map(order => order.originalIndex));
+      const minIndexB = Math.min(...b[1].map(order => order.originalIndex));
+      return minIndexA - minIndexB;
+    });
+
+    for (const [groupKey, groupOrders] of sortedGroups) {
+      // Sort items within each group by item index to preserve item order
+      groupOrders.sort((a, b) => a.itemIndex - b.itemIndex);
+      
+      console.log(`📦 Processing group "${groupKey}" with ${groupOrders.length} items`);
+      
+      for (const rawOrder of groupOrders) {
+        const order: Order = {
+          orderNumber: rawOrder.orderNumber,
+          customerName: rawOrder.customerName,
+          sku: rawOrder.sku,
+          quantity: rawOrder.quantity,
+          location: rawOrder.location,
+          buyerPostcode: rawOrder.buyerPostcode,
+          imageUrl: rawOrder.imageUrl,
+          remainingStock: rawOrder.remainingStock,
+          completed: false,
+        };
+
+        finalOrders.push(order);
+        
+        console.log(`✅ Created final order:`, {
+          orderNumber: order.orderNumber,
+          customerName: order.customerName,
+          sku: order.sku,
+          quantity: order.quantity,
+          location: order.location,
+          buyerPostcode: order.buyerPostcode,
+          hasImage: !!order.imageUrl,
+          remainingStock: order.remainingStock
+        });
+      }
+    }
+
+    console.log(`✅ Successfully processed ${finalOrders.length} final orders`);
+
+    // Log summary
+    const customerCounts = new Map<string, number>();
+    const orderCounts = new Map<string, number>();
+    
+    for (const order of finalOrders) {
+      customerCounts.set(order.customerName, (customerCounts.get(order.customerName) || 0) + 1);
+      orderCounts.set(order.orderNumber, (orderCounts.get(order.orderNumber) || 0) + 1);
+    }
+
+    console.log('📊 Final Processing Summary:');
+    console.log(`  📋 Total order items: ${finalOrders.length}`);
+    console.log(`  👥 Unique customers: ${customerCounts.size}`);
+    console.log(`  🔢 Unique order numbers: ${orderCounts.size}`);
+    console.log(`  🖼️ Items with images: ${finalOrders.filter(o => !!o.imageUrl).length}`);
+    
+    // Show customers with multiple items
+    for (const [customer, count] of customerCounts.entries()) {
+      if (count > 1) {
+        console.log(`  👤 ${customer}: ${count} items`);
+      }
+    }
+
+    return finalOrders;
   } catch (error) {
     console.error('❌ Error parsing HTML:', error);
     throw new Error('Failed to parse HTML file');

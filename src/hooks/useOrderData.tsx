@@ -492,7 +492,7 @@ export const useOrderData = () => {
       );
   };
 
-  // Handle QR code scanning with improved postcode matching
+  // Handle QR code scanning with improved postcode matching - SIMPLIFIED
   const handleQRCodeScan = (qrData: string) => {
     console.log('📱 Processing QR code scan:', qrData);
     
@@ -502,53 +502,19 @@ export const useOrderData = () => {
       console.log('📮 Extracted buyer postcodes:', postcodes);
       
       if (postcodes.length === 0) {
-        alert('No buyer postcodes found in the scanned label');
+        console.log('⚠️ No buyer postcodes found in QR data');
         return;
       }
       
-      // Try to find an order matching any of the postcodes
-      let foundOrder = null;
+      // Use the first valid postcode for search
+      const postcodeToSearch = postcodes[0];
+      console.log('🔍 Using postcode for search:', postcodeToSearch);
       
-      for (const postcode of postcodes) {
-        foundOrder = orders.find(order => {
-          // First, try exact match with the extracted buyer postcode (normalized)
-          if (order.buyerPostcode && normalizePostcode(order.buyerPostcode) === postcode) {
-            console.log('✅ Exact buyer postcode match found:', postcode, 'for order:', order.orderNumber);
-            return true;
-          }
-          
-          // Fallback: Check if the order contains this postcode in any field (normalized)
-          const orderText = JSON.stringify(order).toUpperCase();
-          const normalizedOrderText = orderText.replace(/\s/g, '');
-          
-          // Try exact match first
-          if (normalizedOrderText.includes(postcode)) {
-            console.log('✅ Exact postcode match found in order data:', postcode);
-            return true;
-          }
-          
-          // Try partial match (first part of postcode)
-          const postcodePrefix = postcode.substring(0, Math.min(4, postcode.length - 2));
-          if (postcodePrefix.length >= 3 && normalizedOrderText.includes(postcodePrefix)) {
-            console.log('✅ Partial postcode match found:', postcodePrefix);
-            return true;
-          }
-          
-          return false;
-        });
-        
-        if (foundOrder) break;
-      }
+      // Let the customer search handle the actual order finding
+      handleCustomerSearch(postcodeToSearch);
       
-      if (foundOrder) {
-        setCurrentOrder(foundOrder);
-        console.log('🎯 Found matching order:', foundOrder.orderNumber, 'with postcode:', foundOrder.buyerPostcode);
-      } else {
-        alert(`No order found for postcodes: ${postcodes.join(', ')}`);
-      }
     } catch (error) {
       console.error('Error processing QR code:', error);
-      alert('Error processing the scanned label');
     }
   };
 
