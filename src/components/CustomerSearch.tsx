@@ -200,7 +200,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
                 ? "Search by customer name, order ID, or postcode..."
                 : searchMode === 'scanner'
                 ? lastScannedPostcode 
-                  ? `Last scanned: ${lastScannedPostcode} - Scan next label...`
+                  ? `${lastScannedPostcode} - Scan next label to replace...`
                   : "Scan QR code - postcode will appear here..."
                 : "Use arrow keys to navigate orders..."
             }
@@ -224,22 +224,14 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
         </div>
       </form>
       
-      {/* Mode-specific instructions */}
+      {/* Simplified mode instructions */}
       <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded-lg">
         {searchMode === 'manual' && (
           <p>Type customer name, order ID, or postcode to search</p>
         )}
         
         {searchMode === 'scanner' && (
-          <div>
-            <p className="font-medium text-blue-700 mb-1">QR Scanner Mode Active</p>
-            <p>• Scan a shipping label to extract buyer postcode</p>
-            <p>• Postcode will appear in search bar and auto-search orders</p>
-            <p>• Next scan will replace current postcode</p>
-            {lastScannedPostcode && (
-              <p className="text-green-600 mt-1">✓ Last scanned: {lastScannedPostcode}</p>
-            )}
-          </div>
+          <p>Scan shipping labels to extract buyer postcodes automatically</p>
         )}
         
         {searchMode === 'arrows' && (

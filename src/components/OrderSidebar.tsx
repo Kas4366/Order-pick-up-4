@@ -89,6 +89,29 @@ export const OrderSidebar: React.FC<OrderSidebarProps> = ({
 
   const currentGroup = getCurrentGroup();
 
+  // Scroll to current order in sidebar
+  React.useEffect(() => {
+    if (currentOrder && currentOrderIndex >= 0) {
+      const currentGroupIndex = groupedOrders.findIndex(group => 
+        group.items.some(item => 
+          item.orderNumber === currentOrder.orderNumber && 
+          item.sku === currentOrder.sku &&
+          item.customerName === currentOrder.customerName
+        )
+      );
+      
+      if (currentGroupIndex >= 0) {
+        const groupElement = document.querySelector(`[data-group-index="${currentGroupIndex}"]`);
+        if (groupElement) {
+          groupElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+        }
+      }
+    }
+  }, [currentOrder, currentOrderIndex, groupedOrders]);
+
   return (
     <div className="w-80 shrink-0 bg-white rounded-lg shadow-md border border-gray-200 h-[calc(100vh-8rem)] overflow-hidden flex flex-col">
       <div className="p-4 border-b border-gray-200">
@@ -109,7 +132,11 @@ export const OrderSidebar: React.FC<OrderSidebarProps> = ({
           const isCompleted = group.completedItems === group.totalItems && group.totalItems > 0;
           
           return (
-            <div key={`${group.customerName}-${group.orderNumber}-${groupIndex}`} className="border-b border-gray-100">
+            <div 
+              key={`${group.customerName}-${group.orderNumber}-${groupIndex}`} 
+              className="border-b border-gray-100"
+              data-group-index={groupIndex}
+            >
               {/* Group Header - Clickable for single items or group selection */}
               <button
                 onClick={() => {

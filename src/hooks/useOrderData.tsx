@@ -492,7 +492,7 @@ export const useOrderData = () => {
       );
   };
 
-  // Handle QR code scanning with improved postcode matching - SIMPLIFIED
+  // Handle QR code scanning - SIMPLIFIED WITHOUT POPUPS
   const handleQRCodeScan = (qrData: string) => {
     console.log('📱 Processing QR code scan:', qrData);
     
@@ -534,7 +534,6 @@ export const useOrderData = () => {
           console.log('Found order via Selro API:', searchResults[0].orderNumber);
         } else {
           console.log('No order found in Selro for:', searchTerm);
-          alert(`No order found for: ${searchTerm}`);
         }
       } else if (isUsingVeeqoApi && selectedVeeqoStatus) {
         // Search using Veeqo API
@@ -546,7 +545,6 @@ export const useOrderData = () => {
           console.log('Found order via Veeqo API:', searchResults[0].orderNumber);
         } else {
           console.log('No order found in Veeqo for:', searchTerm);
-          alert(`No order found for: ${searchTerm}`);
         }
       } else {
         // Search in loaded orders (file-based) - enhanced search with postcode normalization
@@ -582,12 +580,10 @@ export const useOrderData = () => {
           console.log('Found order for search term:', searchTerm, 'Order:', matchedOrder.orderNumber);
         } else {
           console.log('No order found for search term:', searchTerm);
-          alert(`No order found for: ${searchTerm}`);
         }
       }
     } catch (error) {
       console.error('Error searching:', error);
-      alert('Error searching. Please try again.');
     }
   };
 
