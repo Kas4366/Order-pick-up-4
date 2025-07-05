@@ -54,6 +54,9 @@ function App() {
     skuImageCsvInfo,
     handleSkuImageCsvUpload,
     clearSkuImageCsv,
+    // Archive
+    handleLoadArchivedOrder,
+    isArchiveInitialized,
   } = useOrderData();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -174,6 +177,16 @@ function App() {
             <p className="text-lg text-gray-600 mb-6">
               Use the settings menu to connect to Selro, Veeqo, upload HTML files, or import CSV data to get started with order picking.
             </p>
+            
+            {/* Archive Status Indicator */}
+            {isArchiveInitialized && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 max-w-md mx-auto">
+                <p className="text-sm text-green-800">
+                  📋 <strong>Archive System Active:</strong> All processed orders are automatically saved for future reference. 
+                  Search old orders by scanning QR codes or using the Archive tab in settings.
+                </p>
+              </div>
+            )}
             
             <div className="flex justify-center">
               <button
@@ -298,6 +311,7 @@ function App() {
         skuImageCsvInfo={skuImageCsvInfo}
         onSkuImageCsvUpload={handleSkuImageCsvUpload}
         onClearSkuImageCsv={clearSkuImageCsv}
+        onLoadArchivedOrder={handleLoadArchivedOrder}
       />
     </Layout>
   );

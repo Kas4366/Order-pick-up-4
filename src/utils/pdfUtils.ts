@@ -2,11 +2,13 @@ import { Order } from '../types/Order';
 
 export const parseHtmlContent = async (
   file: File, 
-  imagesFolderHandle?: FileSystemDirectoryHandle
+  imagesFolderHandle?: FileSystemDirectoryHandle,
+  fileDate?: string
 ): Promise<Order[]> => {
   try {
     console.log('🔍 Starting HTML parsing...');
     console.log('📁 Images folder handle:', imagesFolderHandle ? `✅ Available (${imagesFolderHandle.name})` : '❌ Not available');
+    console.log('📅 File date:', fileDate || 'Not provided');
     
     const text = await file.text();
     
@@ -70,6 +72,53 @@ export const parseHtmlContent = async (
         // Extract location from the correct cell (5th column)
         const locationCell = orderDetails.querySelector('td:nth-child(5)');
         const location = locationCell?.textContent?.trim() || 'Not specified';
+
+        // Extract order value from the 6th column
+        let orderValue: number | undefined = undefined;
+        const orderValueCell = orderDetails.querySelector('td:nth-child(6)');
+        if (orderValueCell) {
+          const valueText = orderValueCell.textContent?.trim() || '';
+          console.log(`💰 Raw order value text for ${sku}:`, valueText);
+          
+          // Clean the value text - remove currency symbols, commas, and extra spaces
+          const cleanedValue = valueText
+            .replace(/[£$€¥₹₽¢]/g, '') // Remove common currency symbols
+            .replace(/[,\s]/g, '') // Remove commas and spaces
+            .replace(/[^\d.-]/g, ''); // Keep only digits, dots, and minus signs
+          
+          if (cleanedValue) {
+            const parsedValue = parseFloat(cleanedValue);
+            if (!isNaN(parsedValue)) {
+              orderValue = parsedValue;
+              console.log(`💰 Extracted order value for ${sku}: ${orderValue}`);
+            } else {
+              console.log(`⚠️ Could not parse order value for ${sku}: "${cleanedValue}"`);
+            }
+          } else {
+            console.log(`⚠️ No order value found for ${sku}`);
+          }
+        }
+
+        // Extract channel type and channel from appropriate columns (adjust column numbers as needed)
+        let channelType = '';
+        let channel = '';
+        let packagingType = '';
+        
+        // Try to extract from additional columns if they exist
+        const channelTypeCell = orderDetails.querySelector('td:nth-child(8)');
+        if (channelTypeCell) {
+          channelType = channelTypeCell.textContent?.trim() || '';
+        }
+        
+        const channelCell = orderDetails.querySelector('td:nth-child(9)');
+        if (channelCell) {
+          channel = channelCell.textContent?.trim() || '';
+        }
+        
+        const packagingTypeCell = orderDetails.querySelector('td:nth-child(10)');
+        if (packagingTypeCell) {
+          packagingType = packagingTypeCell.textContent?.trim() || '';
+        }
 
         // Extract remaining stock information from HTML - IMPROVED LOGIC
         let remainingStock: number | undefined = undefined;
@@ -262,6 +311,11 @@ export const parseHtmlContent = async (
           buyerPostcode: buyerPostcode,
           imageUrl: imageUrl,
           remainingStock: remainingStock,
+          orderValue: orderValue,
+          fileDate: fileDate,
+          channelType: channelType,
+          channel: channel || '',
+          packagingType: packagingType || '',
           originalIndex: orderIndex, // Use order index for grouping
           itemIndex: itemIndex, // Track item position within order
         });
@@ -274,6 +328,11 @@ export const parseHtmlContent = async (
           location,
           buyerPostcode,
           remainingStock,
+          orderValue,
+          fileDate,
+          channelType,
+          channel,
+          packagingType,
           hasImage: !!imageUrl,
           itemIndex
         });
@@ -329,6 +388,11 @@ export const parseHtmlContent = async (
           buyerPostcode: rawOrder.buyerPostcode,
           imageUrl: rawOrder.imageUrl,
           remainingStock: rawOrder.remainingStock,
+          orderValue: rawOrder.orderValue,
+          fileDate: rawOrder.fileDate,
+         channelType: rawOrder.channelType,
+         channel: rawOrder.channel || '',
+         packagingType: rawOrder.packagingType || '',
           completed: false,
         };
 
@@ -341,6 +405,11 @@ export const parseHtmlContent = async (
           quantity: order.quantity,
           location: order.location,
           buyerPostcode: order.buyerPostcode,
+          orderValue: order.orderValue,
+          fileDate: order.fileDate,
+          channelType: order.channelType,
+          channel: order.channel || '',
+          packagingType: order.packagingType || '',
           hasImage: !!order.imageUrl,
           remainingStock: order.remainingStock
         });
@@ -363,6 +432,8 @@ export const parseHtmlContent = async (
     console.log(`  👥 Unique customers: ${customerCounts.size}`);
     console.log(`  🔢 Unique order numbers: ${orderCounts.size}`);
     console.log(`  🖼️ Items with images: ${finalOrders.filter(o => !!o.imageUrl).length}`);
+    console.log(`  💰 Items with order values: ${finalOrders.filter(o => o.orderValue !== undefined).length}`);
+    console.log(`  📅 File date: ${fileDate || 'Not provided'}`);
     
     // Show customers with multiple items
     for (const [customer, count] of customerCounts.entries()) {
@@ -497,13 +568,15 @@ async function findImageFile(
 // Replace the simulation with actual HTML parsing
 export const simulatePdfParsing = async (
   file: File, 
-  imagesFolderHandle?: FileSystemDirectoryHandle
+  imagesFolderHandle?: FileSystemDirectoryHandle,
+  fileDate?: string
 ): Promise<Order[]> => {
   console.log('🚀 simulatePdfParsing called with:', {
     fileName: file.name,
     hasImagesFolder: !!imagesFolderHandle,
-    imagesFolderName: imagesFolderHandle?.name
+    imagesFolderName: imagesFolderHandle?.name,
+    fileDate: fileDate || 'Not provided'
   });
   
-  return parseHtmlContent(file, imagesFolderHandle);
+  return parseHtmlContent(file, imagesFolderHandle, fileDate);
 };

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { MapPin, Box, Check, Volume2, VolumeX, Package, User, Hash, AlertTriangle, Clock } from 'lucide-react';
+import { MapPin, Box, Check, Volume2, VolumeX, Package, User, Hash, AlertTriangle, Clock, DollarSign, Calendar, Truck } from 'lucide-react';
 import { Order } from '../types/Order';
 import { VoiceSettings } from '../types/VoiceSettings';
 import { StockTrackingItem } from '../types/StockTracking';
@@ -41,6 +41,7 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const speakTimeoutRef = useRef<number | null>(null);
+  const checkboxRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   
   // Check if current order is already tracked for reordering
@@ -50,6 +51,26 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
       item.orderNumber === order.orderNumber
     );
   }, [stockTrackingItems, order.sku, order.orderNumber]);
+  
+  // Global spacebar listener for reorder checkbox - FIXED
+  useEffect(() => {
+    const handleSpacebarPress = (e: KeyboardEvent) => {
+      // Only trigger if spacebar is pressed and we're not in an input field
+      if (e.code === 'Space' && 
+          document.activeElement?.tagName !== 'INPUT' && 
+          document.activeElement?.tagName !== 'TEXTAREA' &&
+          document.activeElement?.tagName !== 'BUTTON' &&
+          !document.activeElement?.closest('button') &&
+          !document.activeElement?.closest('input')) {
+        e.preventDefault();
+        console.log('🔘 Spacebar pressed - toggling reorder checkbox');
+        handleCheckboxToggle();
+      }
+    };
+
+    window.addEventListener('keydown', handleSpacebarPress);
+    return () => window.removeEventListener('keydown', handleSpacebarPress);
+  }, [currentTrackedItem, order]);
 
   // Calculate next orders with same SKU
   const nextSkuNeeds = useMemo((): NextSkuNeeds | null => {
@@ -191,12 +212,17 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
     }
   };
 
-  const handleCheckboxChange = () => {
+  // FIXED CHECKBOX TOGGLE FUNCTION
+  const handleCheckboxToggle = () => {
+    console.log('🔘 Checkbox toggle triggered, current tracked item:', !!currentTrackedItem);
+    
     if (currentTrackedItem) {
       // Item is already tracked, so unmark it
+      console.log('🔘 Unmarking item for reorder');
       onUnmarkForReorder(currentTrackedItem.sku, currentTrackedItem.markedDate);
     } else {
       // Item is not tracked, so mark it
+      console.log('🔘 Marking item for reorder');
       onMarkForReorder(order);
     }
   };
@@ -234,12 +260,123 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
   const stockStatus = getStockStatus();
   const showLowStockWarning = stockStatus && (stockStatus.status === 'insufficient' || stockStatus.status === 'low');
 
+  // Format currency value
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP'
+    }).format(value);
+  };
+
+  // Format file date
+  const formatFileDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
+
+  // Get channel logo based on channel type - UPDATED WITH BIGGER LOGOS
+  const getChannelLogo = (channelType: string) => {
+    const type = channelType.toLowerCase();
+    if (type.includes('ebay')) {
+      return '/logos/eBay.png';
+    } else if (type.includes('amazon')) {
+      return '/logos/Amazon.jpg';
+    } else if (type.includes('etsy')) {
+      return '/logos/Etsy_logo.svg.png';
+    } else if (type.includes('bigcommerce')) {
+      return '/logos/bigcommerce-logo-png_seeklogo-338422.png';
+    }
+    return null;
+  };
+
+  // Get packaging icon based on packaging type
+  const getPackagingIcon = (packagingType: string) => {
+    const type = packagingType.toLowerCase();
+    if (type.includes('small') || type.includes('packet')) {
+      return '📮'; // Small packet
+    } else if (type.includes('large') || type.includes('letter')) {
+      return '📬'; // Large letter
+    } else if (type.includes('parcel') || type.includes('box')) {
+      return '📦'; // Parcel/Box
+    } else if (type.includes('envelope') || type.includes('a5')) {
+      return '✉️'; // Envelope
+    } else if (type.includes('bubble')) {
+      return '🫧'; // Bubble wrap
+    } else {
+      return '📋'; // Generic packaging
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
+      {/* PROMINENT NEXT SKU NEEDS ALERT - TOP RED BOX */}
+      {nextSkuNeeds && (
+        <div className="bg-red-600 border-b-4 border-red-700 p-4 text-white">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="bg-white bg-opacity-20 rounded-full p-2">
+                <Package className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white mb-1">
+                  🚨 PICK EXTRA ITEMS FOR EFFICIENCY!
+                </h3>
+                <p className="text-red-100 text-sm">
+                  This SKU ({order.sku}) is needed for upcoming orders
+                </p>
+              </div>
+            </div>
+            
+            {/* LARGE TOTAL QUANTITY DISPLAY */}
+            <div className="bg-white bg-opacity-20 rounded-lg p-4 text-center min-w-[120px]">
+              <p className="text-red-100 text-xs font-medium mb-1">TOTAL TO PICK</p>
+              <p className="text-4xl font-black text-white">
+                {order.quantity + nextSkuNeeds.totalQuantity}
+              </p>
+              <p className="text-red-100 text-xs mt-1">
+                ({order.quantity} + {nextSkuNeeds.totalQuantity} more)
+              </p>
+            </div>
+          </div>
+          
+          {/* DETAILED BREAKDOWN */}
+          <div className="mt-4 bg-white bg-opacity-10 rounded-lg p-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-red-100 text-sm font-medium mb-2">
+                  📦 Current Order: {order.quantity} units
+                </p>
+                <p className="text-red-100 text-sm font-medium">
+                  📋 Future Orders: {nextSkuNeeds.totalQuantity} units across {nextSkuNeeds.orderCount} order{nextSkuNeeds.orderCount !== 1 ? 's' : ''}
+                </p>
+              </div>
+              
+              <div className="space-y-1">
+                <p className="text-red-100 text-xs font-medium mb-1">Upcoming orders:</p>
+                {nextSkuNeeds.orders.slice(0, 2).map((upcomingOrder, index) => (
+                  <div key={index} className="text-xs text-red-100 bg-white bg-opacity-10 rounded px-2 py-1">
+                    <span className="font-medium">#{upcomingOrder.orderNumber}</span> - {upcomingOrder.customerName} 
+                    <span className="text-red-200 ml-1">(Qty: {upcomingOrder.quantity})</span>
+                  </div>
+                ))}
+                {nextSkuNeeds.orders.length > 2 && (
+                  <div className="text-xs text-red-200 text-center">
+                    +{nextSkuNeeds.orders.length - 2} more orders
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="p-3 border-b border-gray-200 bg-gray-50">
         <div className="flex justify-between items-start">
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-1">
+            <div className="flex items-center gap-3 mb-1 flex-wrap">
               <div className="flex items-center gap-2">
                 <Hash className="h-5 w-5 text-gray-600" />
                 <h3 className="text-lg font-bold text-gray-800">
@@ -257,6 +394,38 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                   {groupedOrderItems.length} items
                 </span>
               )}
+
+              {/* File Date Display */}
+              {order.fileDate && (
+                <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <Calendar className="h-3 w-3" />
+                  <span>File: {formatFileDate(order.fileDate)}</span>
+                </div>
+              )}
+
+              {/* Channel Information - UPDATED WITH BIGGER LOGOS AND CHANNEL DATA */}
+              {order.channelType && (
+                <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-1 border border-gray-200">
+                  {getChannelLogo(order.channelType) ? (
+                    <img 
+                      src={getChannelLogo(order.channelType)} 
+                      alt={order.channelType} 
+                      className="h-6 w-auto max-w-[80px] object-contain" 
+                    />
+                  ) : (
+                    <span className="text-xs font-medium text-blue-700 bg-blue-100 px-2 py-1 rounded">
+                      {order.channelType}
+                    </span>
+                  )}
+                  {/* SHOW CHANNEL DATA FROM MAPPED COLUMN */}
+                  {order.channel && order.channel !== order.channelType && (
+                    <span className="text-xs text-gray-600 font-medium">
+                      {order.channel}
+                    </span>
+                  )}
+                </div>
+              )}
+
             </div>
             
             {order.buyerPostcode && (
@@ -377,6 +546,19 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                         </div>
                       </div>
 
+                      {/* Order Value */}
+                      {item.orderValue !== undefined && (
+                        <div className="mt-4">
+                          <h5 className="text-xs font-medium text-blue-700 mb-1">Order Value</h5>
+                          <div className="flex items-center gap-2">
+                            <DollarSign className="h-4 w-4 text-green-600" />
+                            <p className="text-lg font-bold text-green-900">
+                              {formatCurrency(item.orderValue)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Stock Information */}
                       {item.remainingStock !== undefined && (
                         <div className="mt-4">
@@ -392,6 +574,21 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                                 </p>
                               </div>
                             )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Packaging Type for grouped items */}
+                      {item.packagingType && (
+                        <div className="mt-4">
+                          <h5 className="text-xs font-medium text-blue-700 mb-1">Packaging Required</h5>
+                          <div className="bg-green-100 rounded p-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">{getPackagingIcon(item.packagingType)}</span>
+                              <div>
+                                <p className="text-sm font-medium text-green-900">{item.packagingType}</p>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -469,6 +666,19 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                     </p>
                   </div>
 
+                  {/* Order Value */}
+                  {order.orderValue !== undefined && (
+                    <div>
+                      <h5 className="text-xs font-medium text-blue-700 mb-1">Order Value</h5>
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="h-4 w-4 text-green-600" />
+                        <p className="text-lg font-bold text-green-900">
+                          {formatCurrency(order.orderValue)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Stock Information */}
                   {order.remainingStock !== undefined && (
                     <div>
@@ -501,39 +711,19 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                 </div>
               </div>
 
-              {/* Next Orders with Same SKU */}
-              {nextSkuNeeds && (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <Clock className="h-5 w-5 text-orange-600 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1">
-                      <h4 className="text-sm font-medium text-orange-800 mb-2">Upcoming Orders - Same SKU</h4>
-                      <div className="space-y-2">
-                        <div className="bg-orange-100 rounded p-2">
-                          <p className="text-sm font-medium text-orange-900">
-                            {nextSkuNeeds.totalQuantity} more units needed
-                          </p>
-                          <p className="text-xs text-orange-700">
-                            Across {nextSkuNeeds.orderCount} upcoming order{nextSkuNeeds.orderCount !== 1 ? 's' : ''}
-                          </p>
-                        </div>
-                        <div className="space-y-1 max-h-24 overflow-y-auto">
-                          {nextSkuNeeds.orders.slice(0, 3).map((upcomingOrder, index) => (
-                            <div key={index} className="text-xs text-orange-700 bg-white rounded px-2 py-1">
-                              <span className="font-medium">#{upcomingOrder.orderNumber}</span> - {upcomingOrder.customerName} 
-                              <span className="text-orange-600 ml-1">(Qty: {upcomingOrder.quantity})</span>
-                            </div>
-                          ))}
-                          {nextSkuNeeds.orders.length > 3 && (
-                            <div className="text-xs text-orange-600 text-center">
-                              +{nextSkuNeeds.orders.length - 3} more orders
-                            </div>
-                          )}
-                        </div>
-                        <p className="text-xs text-orange-600 italic">
-                          💡 Consider picking extra units for efficiency
-                        </p>
-                      </div>
+              {/* Packaging Information */}
+              {order.packagingType && (
+                <div className="bg-orange-50 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Truck className="h-5 w-5 text-orange-600" />
+                    <h4 className="text-sm font-medium text-orange-800">Packaging Required</h4>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{getPackagingIcon(order.packagingType)}</span>
+                    <div>
+                      <p className="text-lg font-bold text-orange-900">{order.packagingType}</p>
+                      <p className="text-xs text-orange-700">Use this packaging type for shipping</p>
                     </div>
                   </div>
                 </div>
@@ -554,21 +744,26 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                 </div>
               )}
 
-              {/* Mark for Reorder - Always visible */}
+              {/* Mark for Reorder - COMPLETELY FIXED CHECKBOX */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <label className="flex items-center gap-3 cursor-pointer">
+                <label className="flex items-center gap-3 cursor-pointer" onClick={(e) => e.preventDefault()}>
                   <input
+                    ref={checkboxRef}
                     type="checkbox"
                     checked={!!currentTrackedItem}
-                    onChange={handleCheckboxChange}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    onChange={handleCheckboxToggle}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
                   />
-                  <span className="text-sm font-medium text-gray-800">
+                  <span 
+                    className="text-sm font-medium text-gray-800 cursor-pointer"
+                    onClick={handleCheckboxToggle}
+                  >
                     {currentTrackedItem ? 'Marked for reorder ✓' : 'Mark for reorder'}
                   </span>
                 </label>
                 <p className="text-xs text-gray-600 mt-2">
-                  Mark this item to track it for reordering later
+                  Mark this item to track it for reordering later (Press SPACEBAR as shortcut)
                 </p>
               </div>
               

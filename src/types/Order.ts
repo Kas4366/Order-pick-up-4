@@ -17,4 +17,13 @@ export interface Order {
   buyerPostcode?: string;
   // Stock information
   remainingStock?: number;
+  // File date tracking
+  fileDate?: string;
+  // Order value
+  orderValue?: number;
+  // Channel information
+  channelType?: string;
+  channel?: string;
+  // Packaging information
+  packagingType?: string;
 }

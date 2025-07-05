@@ -1,4 +1,4 @@
-export type CsvField = 'orderNumber' | 'customerFirstName' | 'customerLastName' | 'sku' | 'quantity' | 'location' | 'buyerPostcode' | 'imageUrl' | 'remainingStock';
+export type CsvField = 'orderNumber' | 'customerFirstName' | 'customerLastName' | 'sku' | 'quantity' | 'location' | 'buyerPostcode' | 'imageUrl' | 'remainingStock' | 'orderValue' | 'channelType' | 'channel' | 'packagingType';
 
 export interface CsvColumnMapping {
   [key: string]: string; // Maps CsvField to the actual CSV column header
@@ -14,6 +14,10 @@ export const defaultCsvColumnMapping: CsvColumnMapping = {
   buyerPostcode: 'Buyer Postcode',
   imageUrl: 'Image URL',
   remainingStock: 'Remaining Stock',
+  orderValue: 'Order Value',
+  channelType: 'Channel Type',
+  channel: 'Channel',
+  packagingType: 'Packaging Type',
 };
 
 // New interface for SKU-Image mapping

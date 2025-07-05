@@ -140,15 +140,18 @@ export const parseSkuImageCsv = async (file: File): Promise<SkuImageMap> => {
  * @param file The CSV file to parse.
  * @param mappings An object mapping Order properties to CSV column headers.
  * @param skuImageMap Optional map of SKU to image URL for fallback.
+ * @param fileDate Optional file date to assign to all orders.
  * @returns A Promise that resolves to an array of Order objects.
  */
 export const parseCsvFile = async (
   file: File, 
   mappings: CsvColumnMapping, 
-  skuImageMap?: SkuImageMap
+  skuImageMap?: SkuImageMap,
+  fileDate: string = new Date().toISOString()
 ): Promise<Order[]> => {
   console.log('🔍 Starting CSV parsing with mappings:', mappings);
   console.log('🖼️ SKU-Image map available:', !!skuImageMap, skuImageMap ? `(${Object.keys(skuImageMap).length} entries)` : '');
+  console.log('📅 File date:', fileDate || 'Not provided');
   
   const text = await file.text();
   const allRows = parseCsv(text);
@@ -218,6 +221,10 @@ export const parseCsvFile = async (
     const buyerPostcode = extractValue('buyerPostcode');
     let imageUrl = extractValue('imageUrl'); // Get from CSV first
     const remainingStockStr = extractValue('remainingStock');
+    const orderValueStr = extractValue('orderValue');
+    const channelType = extractValue('channelType');
+    const channel = extractValue('channel');
+    const packagingType = extractValue('packagingType');
 
     console.log(`🔍 Row ${rowNumber} extracted values:`, {
       orderNumber,
@@ -228,7 +235,11 @@ export const parseCsvFile = async (
       location,
       buyerPostcode: buyerPostcode ? buyerPostcode.substring(0, 10) + '...' : '',
       hasImageUrl: !!imageUrl,
-      remainingStockStr
+      remainingStockStr,
+      orderValueStr,
+      channelType,
+      channel,
+      packagingType
     });
 
     // Build customer name from first and last name
@@ -263,7 +274,7 @@ export const parseCsvFile = async (
     }
 
     // Handle image URL fallback logic
-    if (!imageUrl && skuImageMap && sku) {
+    if (!imageUrl && skuImageMap && Object.keys(skuImageMap).length > 0 && sku) {
       const fallbackImageUrl = skuImageMap[sku];
       if (fallbackImageUrl) {
         imageUrl = fallbackImageUrl;
@@ -274,9 +285,33 @@ export const parseCsvFile = async (
       }
     }
 
-    // Parse quantity and remaining stock
+    // Parse quantity, remaining stock, and order value
     const quantity = quantityStr ? Math.max(1, parseInt(quantityStr, 10) || 1) : 1;
     const remainingStock = remainingStockStr ? parseInt(remainingStockStr, 10) : undefined;
+    
+    // Parse order value - clean and convert to number
+    let orderValue: number | undefined = undefined;
+    if (orderValueStr) {
+      console.log(`💰 Raw order value text for ${sku}:`, orderValueStr);
+      
+      // Clean the value text - remove currency symbols, commas, and extra spaces
+      const cleanedValue = orderValueStr
+        .replace(/[£$€¥₹₽¢]/g, '') // Remove common currency symbols
+        .replace(/[,\s]/g, '') // Remove commas and spaces
+        .replace(/[^\d.-]/g, ''); // Keep only digits, dots, and minus signs
+      
+      if (cleanedValue) {
+        const parsedValue = parseFloat(cleanedValue);
+        if (!isNaN(parsedValue)) {
+          orderValue = parsedValue;
+          console.log(`💰 Extracted order value for ${sku}: ${orderValue}`);
+        } else {
+          console.log(`⚠️ Could not parse order value for ${sku}: "${cleanedValue}"`);
+        }
+      } else {
+        console.log(`⚠️ No order value found for ${sku}`);
+      }
+    }
 
     // Store raw order data with original index for sorting
     rawOrders.push({
@@ -288,6 +323,11 @@ export const parseCsvFile = async (
       buyerPostcode: buyerPostcode ? buyerPostcode.replace(/\s/g, '') : '', // Normalize postcode
       imageUrl: imageUrl,
       remainingStock: remainingStock,
+      orderValue: orderValue,
+      fileDate: fileDate,
+      channelType: channelType,
+      channel: channel || '',
+      packagingType: packagingType,
       originalIndex: i, // Store original CSV row index
     });
 
@@ -300,7 +340,12 @@ export const parseCsvFile = async (
       buyerPostcode: buyerPostcode ? buyerPostcode.replace(/\s/g, '') : '',
       hasImageUrl: !!imageUrl,
       imageSource: !extractValue('imageUrl') && imageUrl ? 'fallback' : 'csv',
-      remainingStock: remainingStock
+      remainingStock: remainingStock,
+      orderValue: orderValue,
+      fileDate: fileDate,
+      channelType: channelType || '',
+      channel: channel || '',
+      packagingType: packagingType || '',
     });
   }
 
@@ -354,6 +399,11 @@ export const parseCsvFile = async (
         buyerPostcode: rawOrder.buyerPostcode,
         imageUrl: rawOrder.imageUrl,
         remainingStock: rawOrder.remainingStock,
+        orderValue: rawOrder.orderValue,
+        fileDate: fileDate,
+        channelType: rawOrder.channelType || '',
+        channel: rawOrder.channel || '',
+        packagingType: rawOrder.packagingType || '',
         completed: false,
       };
 
@@ -367,13 +417,19 @@ export const parseCsvFile = async (
         location: order.location,
         buyerPostcode: order.buyerPostcode,
         hasImageUrl: !!order.imageUrl,
-        remainingStock: order.remainingStock
+        remainingStock: order.remainingStock,
+        orderValue: order.orderValue,
+        fileDate: order.fileDate,
+        channelType: order.channelType,
+        channel: order.channel,
+        packagingType: order.packagingType
       });
     }
   }
 
   console.log(`✅ Successfully processed ${finalOrders.length} final orders`);
   console.log(`🖼️ Final image URL statistics: ${finalOrders.filter(o => !!o.imageUrl).length} orders have images (${imageUrlFallbackCount} from fallback)`);
+  console.log(`💰 Final order value statistics: ${finalOrders.filter(o => o.orderValue !== undefined).length} orders have values`);
 
   // Log summary
   const customerCounts = new Map<string, number>();
@@ -390,6 +446,10 @@ export const parseCsvFile = async (
   console.log(`  🔢 Unique order numbers: ${orderCounts.size}`);
   console.log(`  🖼️ Orders with images: ${finalOrders.filter(o => !!o.imageUrl).length}`);
   console.log(`  🖼️ Images from fallback: ${imageUrlFallbackCount}`);
+  console.log(`  💰 Orders with values: ${finalOrders.filter(o => o.orderValue !== undefined).length}`);
+  console.log(`  📅 File date: ${fileDate || 'Not provided'}`);
+  console.log(`  🏪 Orders with channel type: ${finalOrders.filter(o => o.channelType).length}`);
+  console.log(`  📦 Orders with packaging type: ${finalOrders.filter(o => o.packagingType).length}`);
   
   // Show customers with multiple items
   for (const [customer, count] of customerCounts.entries()) {

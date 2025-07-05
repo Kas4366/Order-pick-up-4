@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Map, Save, AlertCircle, CheckCircle, Image, Hash, RefreshCw, Package, Trash2, Download } from 'lucide-react';
+import { Upload, FileText, Map, Save, AlertCircle, CheckCircle, Image, Hash, RefreshCw, Package, Trash2, Download, DollarSign, Store, Truck } from 'lucide-react';
 import { CsvColumnMapping, CsvField, defaultCsvColumnMapping, SkuImageCsvInfo } from '../types/Csv';
 import { getCsvHeaders } from '../utils/csvUtils';
 
@@ -42,6 +42,10 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
     { key: 'buyerPostcode', label: 'Buyer Postcode', required: false, description: 'Customer\'s postcode for QR matching (try billing_address_zip or shipping_address_zip)' },
     { key: 'imageUrl', label: 'Image URL', required: false, icon: <Image className="h-4 w-4" />, description: 'URL to product image (optional - fallback available)' },
     { key: 'remainingStock', label: 'Remaining Stock', required: false, icon: <Package className="h-4 w-4" />, description: 'Current stock level for the item (optional)' },
+    { key: 'orderValue', label: 'Order Value', required: false, icon: <DollarSign className="h-4 w-4" />, description: 'Monetary value of the order item (optional)' },
+    { key: 'channelType', label: 'Channel Type', required: false, icon: <Store className="h-4 w-4" />, description: 'Sales channel type (e.g., eBay, Amazon, Etsy, BigCommerce) (optional)' },
+    { key: 'channel', label: 'Channel', required: false, icon: <Store className="h-4 w-4" />, description: 'Specific channel information' },
+    { key: 'packagingType', label: 'Packaging Type', required: false, icon: <Truck className="h-4 w-4" />, description: 'Type of packaging required for the order' },
   ];
 
   // Initialize with saved mappings
@@ -151,7 +155,11 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
           'postcode', 'postal code', 'zip code', 'buyer postcode', 'customer postcode', 'postal_code', 'zip_code', 'buyer_postcode', 'customer_postcode'
         ],
         imageUrl: ['image url', 'image_url', 'imageurl', 'photo url', 'picture url', 'image', 'photo', 'picture'],
-        remainingStock: ['remaining stock', 'remaining_stock', 'stock', 'stock level', 'stock_level', 'inventory', 'available', 'on hand', 'on_hand']
+        remainingStock: ['remaining stock', 'remaining_stock', 'stock', 'stock level', 'stock_level', 'inventory', 'available', 'on hand', 'on_hand'],
+        orderValue: ['order value', 'order_value', 'value', 'price', 'amount', 'total', 'cost', 'item value', 'item_value', 'unit price', 'unit_price'],
+        channelType: ['channel type', 'channel_type', 'sales channel', 'sales_channel', 'marketplace', 'platform', 'source'],
+        channel: ['channel', 'sales channel name', 'channel name', 'marketplace name', 'platform name'],
+        packagingType: ['packaging type', 'packaging_type', 'package type', 'package_type', 'packaging', 'package', 'shipping type', 'shipping_type']
       };
       
       const variations = headerVariations[field.key] || [field.key];
@@ -550,6 +558,10 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
           <p>✅ <strong>Order preservation:</strong> Orders are processed in the same order as your CSV file</p>
           <p>✅ <strong>Smart grouping:</strong> Orders with the same order number and customer name are grouped together</p>
           <p>✅ <strong>Stock tracking:</strong> Map remaining stock column to track inventory levels</p>
+          <p>✅ <strong>Order value tracking:</strong> Map order value column to display monetary amounts</p>
+          <p>✅ <strong>File date tracking:</strong> File modification date is automatically recorded for each order</p>
+          <p>✅ <strong>Channel tracking:</strong> Map channel type and channel columns to display sales platform information</p>
+          <p>✅ <strong>Packaging tracking:</strong> Map packaging type column to display packaging requirements</p>
         </div>
       </div>
 
@@ -557,9 +569,9 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
       <div className="bg-gray-50 rounded-lg p-4">
         <h4 className="text-sm font-medium text-gray-800 mb-2">Your CSV Format (based on uploaded file):</h4>
         <div className="bg-white rounded border p-3 text-xs font-mono overflow-x-auto">
-          <div className="text-gray-600 whitespace-nowrap">number,billing_address_first_name,billing_address_last_name,sku,quantity,bin_location,billing_address_zip,remaining_stock</div>
-          <div className="text-gray-800 whitespace-nowrap">15-13169-30112,Abjol,Miah,MBMB-5092,2,SM1,NE8 2BG,15</div>
-          <div className="text-gray-800 whitespace-nowrap">26-13195-58725,Linda,Elliott,506,1,SM1,NG21 9RA,8</div>
+          <div className="text-gray-600 whitespace-nowrap">number,billing_address_first_name,billing_address_last_name,sku,quantity,bin_location,billing_address_zip,remaining_stock,order_value,channel_type,channel,packaging_type</div>
+          <div className="text-gray-800 whitespace-nowrap">15-13169-30112,Abjol,Miah,MBMB-5092,2,SM1,NE8 2BG,15,24.99,eBay,eBay UK,Small Packet</div>
+          <div className="text-gray-800 whitespace-nowrap">26-13195-58725,Linda,Elliott,506,1,SM1,NG21 9RA,8,12.50,Amazon,Amazon FBA,Large Letter</div>
         </div>
         <div className="mt-3 space-y-1 text-xs text-gray-600">
           <p><strong>Auto-mapping suggestions:</strong></p>
@@ -572,6 +584,10 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
           <p>• Buyer Postcode → "billing_address_zip" (fallback: "shipping_address_zip")</p>
           <p>• Image URL → "image_url" (fallback: SKU-Image CSV)</p>
           <p>• Remaining Stock → "remaining_stock" (optional)</p>
+          <p>• Order Value → "order_value" (optional)</p>
+          <p>• Channel Type → "channel_type" (optional)</p>
+          <p>• Channel → "channel" (optional)</p>
+          <p>• Packaging Type → "packaging_type" (optional)</p>
         </div>
       </div>
     </div>

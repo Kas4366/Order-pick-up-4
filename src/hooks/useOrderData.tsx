@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Order } from '../types/Order';
+import { ArchivedOrder } from '../types/Archive';
 import { simulatePdfParsing } from '../utils/pdfUtils';
 import { FileWithImages } from '../types/Settings';
 import { selroApi } from '../services/selroApi';
 import { veeqoApi } from '../services/veeqoApi';
+import { archiveService } from '../services/archiveService';
 import { CsvColumnMapping, defaultCsvColumnMapping, SkuImageMap, SkuImageCsvInfo } from '../types/Csv';
 import { VoiceSettings, defaultVoiceSettings } from '../types/VoiceSettings';
 import { StockTrackingItem } from '../types/StockTracking';
@@ -33,6 +35,25 @@ export const useOrderData = () => {
   // SKU-Image CSV state
   const [skuImageMap, setSkuImageMap] = useState<SkuImageMap>({});
   const [skuImageCsvInfo, setSkuImageCsvInfo] = useState<SkuImageCsvInfo | null>(null);
+
+  // Archive state
+  const [isArchiveInitialized, setIsArchiveInitialized] = useState(false);
+
+  // Initialize archive system on component mount
+  useEffect(() => {
+    const initializeArchive = async () => {
+      try {
+        await archiveService.init();
+        await archiveService.initAutoCleanup(); // Run auto-cleanup check
+        setIsArchiveInitialized(true);
+        console.log('✅ Archive system initialized');
+      } catch (error) {
+        console.error('❌ Failed to initialize archive system:', error);
+      }
+    };
+
+    initializeArchive();
+  }, []);
 
   // Load saved settings on component mount
   useEffect(() => {
@@ -175,6 +196,34 @@ export const useOrderData = () => {
     }
   }, [currentOrder, orders]);
 
+  // Archive orders when they are loaded (with file name extraction)
+  const archiveOrdersWithFileName = async (ordersToArchive: Order[], sourceFile?: File) => {
+    if (!isArchiveInitialized || ordersToArchive.length === 0) return;
+
+    try {
+      // Extract file name from the source file or generate a default name
+      let fileName = 'Unknown File';
+      
+      if (sourceFile) {
+        fileName = sourceFile.name;
+      } else if (isUsingSelroApi && selectedSelroFolderName) {
+        fileName = `Selro-${selectedSelroFolderName}-${new Date().toISOString().split('T')[0]}`;
+      } else if (isUsingVeeqoApi && selectedVeeqoStatus) {
+        fileName = `Veeqo-${selectedVeeqoStatus}-${new Date().toISOString().split('T')[0]}`;
+      } else {
+        fileName = `Orders-${new Date().toISOString().split('T')[0]}`;
+      }
+
+      console.log(`🗄️ Archiving ${ordersToArchive.length} orders from: ${fileName}`);
+      
+      const archivedCount = await archiveService.archiveOrders(ordersToArchive, fileName);
+      console.log(`✅ Successfully archived ${archivedCount} orders`);
+    } catch (error) {
+      console.error('❌ Failed to archive orders:', error);
+      // Don't throw error - archiving failure shouldn't break the main flow
+    }
+  };
+
   // Custom tags management
   const saveCustomTags = (tags: CustomTag[]) => {
     console.log('🏷️ Saving custom tags to localStorage:', tags);
@@ -298,6 +347,9 @@ export const useOrderData = () => {
       setIsUsingSelroApi(true);
       setIsUsingVeeqoApi(false);
       
+      // Archive the loaded orders
+      await archiveOrdersWithFileName(selroOrders);
+      
       console.log(`Loaded ${selroOrders.length} orders from Selro with tag "${tagToUse || 'all'}"`);
     } catch (error) {
       console.error('Error loading orders from Selro:', error);
@@ -339,6 +391,9 @@ export const useOrderData = () => {
       setIsUsingVeeqoApi(true);
       setIsUsingSelroApi(false);
       
+      // Archive the loaded orders
+      await archiveOrdersWithFileName(veeqoOrders);
+      
       console.log(`Loaded ${veeqoOrders.length} orders from Veeqo with status "${statusToUse}"`);
     } catch (error) {
       console.error('Error loading orders from Veeqo:', error);
@@ -362,7 +417,11 @@ export const useOrderData = () => {
         imagesFolderHandle = file.imagesFolderHandle;
       }
 
-      const parsedOrders = await simulatePdfParsing(actualFile, imagesFolderHandle);
+      // Extract file date from the file's last modified timestamp
+      const fileDate = new Date(actualFile.lastModified).toISOString();
+      console.log('📅 File date extracted:', fileDate);
+
+      const parsedOrders = await simulatePdfParsing(actualFile, imagesFolderHandle, fileDate);
       
       if (parsedOrders.length === 0) {
         throw new Error('No orders found in the uploaded file');
@@ -374,6 +433,9 @@ export const useOrderData = () => {
       setCurrentOrderIndex(-1);
       setIsUsingSelroApi(false);
       setIsUsingVeeqoApi(false);
+
+      // Archive the loaded orders
+      await archiveOrdersWithFileName(parsedOrders, actualFile);
     } catch (error) {
       console.error('Error processing file:', error);
       throw error;
@@ -389,8 +451,12 @@ export const useOrderData = () => {
       // Ensure mappings are saved before processing
       saveCsvMappings(mappings);
       
-      // Pass the SKU-Image map to the CSV parser for fallback image URLs
-      const parsedOrders = await parseCsvFile(file, mappings, skuImageMap);
+      // Extract file date from the file's last modified timestamp
+      const fileDate = new Date(file.lastModified).toISOString();
+      console.log('📅 File date extracted:', fileDate);
+      
+      // Pass the SKU-Image map and file date to the CSV parser
+      const parsedOrders = await parseCsvFile(file, mappings, skuImageMap || {}, fileDate);
 
       if (parsedOrders.length === 0) {
         throw new Error('No orders found in the uploaded CSV file. Please check your column mappings and ensure the CSV has data rows.');
@@ -404,6 +470,9 @@ export const useOrderData = () => {
       setCurrentOrderIndex(-1);
       setIsUsingSelroApi(false);
       setIsUsingVeeqoApi(false);
+
+      // Archive the loaded orders
+      await archiveOrdersWithFileName(parsedOrders, file);
       
     } catch (error) {
       console.error('❌ Error processing CSV file:', error);
@@ -474,32 +543,25 @@ export const useOrderData = () => {
     return postcode.replace(/\s/g, '').toUpperCase();
   };
 
-  // Extract postcodes from QR code data
-  const extractPostcodesFromQRData = (qrData: string): string[] => {
-    // UK postcode regex pattern
-    const postcodeRegex = /\b([A-Z]{1,2}[0-9][A-Z0-9]?\s?[0-9][A-Z]{2})\b/g;
-    const matches = qrData.match(postcodeRegex) || [];
-    
-    // Known sender postcodes to filter out
-    const KNOWN_SENDER_POSTCODES = ['LU56RT', 'LU33RZ'];
-    
-    return matches
-      .map(match => normalizePostcode(match)) // Normalize postcodes
-      .filter(postcode => 
-        !KNOWN_SENDER_POSTCODES.some(sender => 
-          postcode.startsWith(sender) || sender.startsWith(postcode.substring(0, 4))
-        )
-      );
-  };
-
-  // Handle QR code scanning - SIMPLIFIED WITHOUT POPUPS
+  // Handle QR code scanning - ENHANCED WITH ARCHIVE SEARCH
   const handleQRCodeScan = (qrData: string) => {
     console.log('📱 Processing QR code scan:', qrData);
     
     try {
       // Extract postcodes from QR data
-      const postcodes = extractPostcodesFromQRData(qrData);
-      console.log('📮 Extracted buyer postcodes:', postcodes);
+      const postcodeRegex = /\b([A-Z]{1,2}[0-9][A-Z0-9]?\s?[0-9][A-Z]{2})\b/g;
+      const matches = qrData.match(postcodeRegex) || [];
+      
+      // Known sender postcodes to filter out
+      const KNOWN_SENDER_POSTCODES = ['LU56RT', 'LU33RZ'];
+      
+      const postcodes = matches
+        .map(match => normalizePostcode(match)) // Normalize postcodes
+        .filter(postcode => 
+          !KNOWN_SENDER_POSTCODES.some(sender => 
+            postcode.startsWith(sender) || sender.startsWith(postcode.substring(0, 4))
+          )
+        );
       
       if (postcodes.length === 0) {
         console.log('⚠️ No buyer postcodes found in QR data');
@@ -510,7 +572,7 @@ export const useOrderData = () => {
       const postcodeToSearch = postcodes[0];
       console.log('🔍 Using postcode for search:', postcodeToSearch);
       
-      // Let the customer search handle the actual order finding
+      // Let the customer search handle the actual order finding (which now includes archive search)
       handleCustomerSearch(postcodeToSearch);
       
     } catch (error) {
@@ -518,11 +580,13 @@ export const useOrderData = () => {
     }
   };
 
-  // Handle customer search
+  // Handle customer search - ENHANCED WITH ARCHIVE SEARCH
   const handleCustomerSearch = async (searchTerm: string) => {
     if (!searchTerm) return;
     
     try {
+      let foundOrder: Order | null = null;
+      
       if (isUsingSelroApi && selectedSelroFolderName) {
         // Search using Selro API with tag filtering
         const tagToUse = selectedSelroTag === 'all' ? undefined : selectedSelroTag;
@@ -530,10 +594,8 @@ export const useOrderData = () => {
         const searchResults = await selroApi.searchOrdersByCustomer(searchTerm, tagToUse || 'all');
         
         if (searchResults.length > 0) {
-          setCurrentOrder(searchResults[0]);
-          console.log('Found order via Selro API:', searchResults[0].orderNumber);
-        } else {
-          console.log('No order found in Selro for:', searchTerm);
+          foundOrder = searchResults[0];
+          console.log('Found order via Selro API:', foundOrder.orderNumber);
         }
       } else if (isUsingVeeqoApi && selectedVeeqoStatus) {
         // Search using Veeqo API
@@ -541,17 +603,15 @@ export const useOrderData = () => {
         const searchResults = await veeqoApi.searchOrdersByCustomer(searchTerm, selectedVeeqoStatus);
         
         if (searchResults.length > 0) {
-          setCurrentOrder(searchResults[0]);
-          console.log('Found order via Veeqo API:', searchResults[0].orderNumber);
-        } else {
-          console.log('No order found in Veeqo for:', searchTerm);
+          foundOrder = searchResults[0];
+          console.log('Found order via Veeqo API:', foundOrder.orderNumber);
         }
       } else {
         // Search in loaded orders (file-based) - enhanced search with postcode normalization
         const searchTermLower = searchTerm.toLowerCase();
         const normalizedSearchTerm = normalizePostcode(searchTerm);
         
-        const matchedOrder = orders.find(order => {
+        foundOrder = orders.find(order => {
           // Search by customer name
           if (order.customerName.toLowerCase().includes(searchTermLower)) {
             return true;
@@ -574,12 +634,63 @@ export const useOrderData = () => {
           
           return false;
         });
+      }
+      
+      if (foundOrder) {
+        setCurrentOrder(foundOrder);
+        console.log('Found order for search term:', searchTerm, 'Order:', foundOrder.orderNumber);
+      } else {
+        // If not found in current orders, search the archive
+        console.log('🗄️ Order not found in current data, searching archive...');
         
-        if (matchedOrder) {
-          setCurrentOrder(matchedOrder);
-          console.log('Found order for search term:', searchTerm, 'Order:', matchedOrder.orderNumber);
+        if (isArchiveInitialized) {
+          try {
+            const archiveResult = await archiveService.searchArchive(searchTerm);
+            
+            if (archiveResult.foundInArchive && archiveResult.orders.length > 0) {
+              const archivedOrder = archiveResult.orders[0];
+              console.log('✅ Found order in archive:', archivedOrder.orderNumber, 'from file:', archivedOrder.fileName);
+              
+              // Convert archived order to regular order and set as current
+              const orderFromArchive: Order = {
+                orderNumber: archivedOrder.orderNumber,
+                customerName: archivedOrder.customerName,
+                sku: archivedOrder.sku,
+                quantity: archivedOrder.quantity,
+                location: archivedOrder.location,
+                imageUrl: archivedOrder.imageUrl,
+                additionalDetails: archivedOrder.additionalDetails,
+                buyerPostcode: archivedOrder.buyerPostcode,
+                remainingStock: archivedOrder.remainingStock,
+                orderValue: archivedOrder.orderValue,
+                fileDate: archivedOrder.fileDate,
+                channelType: archivedOrder.channelType,
+                channel: archivedOrder.channel,
+                packagingType: archivedOrder.packagingType,
+                completed: archivedOrder.completed || false,
+                selroOrderId: archivedOrder.selroOrderId,
+                selroItemId: archivedOrder.selroItemId,
+                veeqoOrderId: archivedOrder.veeqoOrderId,
+                veeqoItemId: archivedOrder.veeqoItemId,
+              };
+              
+              setCurrentOrder(orderFromArchive);
+              
+              // Show a notification that this order was found in archive
+              const fileDate = archivedOrder.fileDate ? new Date(archivedOrder.fileDate).toLocaleDateString('en-GB') : 'Unknown date';
+              console.log(`📋 Loaded archived order from ${archivedOrder.fileName} (${fileDate})`);
+              
+              // Optionally show a visual indicator that this is from archive
+              // You could add a toast notification here if you implement one
+              
+            } else {
+              console.log('No order found for search term:', searchTerm);
+            }
+          } catch (error) {
+            console.error('Error searching archive:', error);
+          }
         } else {
-          console.log('No order found for search term:', searchTerm);
+          console.log('Archive not initialized, cannot search');
         }
       }
     } catch (error) {
@@ -641,6 +752,40 @@ export const useOrderData = () => {
     }
   };
 
+  // Handle loading archived order
+  const handleLoadArchivedOrder = (archivedOrder: ArchivedOrder) => {
+    console.log('📋 Loading archived order:', archivedOrder.orderNumber, 'from file:', archivedOrder.fileName);
+    
+    // Convert archived order to regular order
+    const orderFromArchive: Order = {
+      orderNumber: archivedOrder.orderNumber,
+      customerName: archivedOrder.customerName,
+      sku: archivedOrder.sku,
+      quantity: archivedOrder.quantity,
+      location: archivedOrder.location,
+      imageUrl: archivedOrder.imageUrl,
+      additionalDetails: archivedOrder.additionalDetails,
+      buyerPostcode: archivedOrder.buyerPostcode,
+      remainingStock: archivedOrder.remainingStock,
+      orderValue: archivedOrder.orderValue,
+      fileDate: archivedOrder.fileDate,
+      channelType: archivedOrder.channelType,
+      channel: archivedOrder.channel,
+      packagingType: archivedOrder.packagingType,
+      completed: archivedOrder.completed || false,
+      selroOrderId: archivedOrder.selroOrderId,
+      selroItemId: archivedOrder.selroItemId,
+      veeqoOrderId: archivedOrder.veeqoOrderId,
+      veeqoItemId: archivedOrder.veeqoItemId,
+    };
+    
+    setCurrentOrder(orderFromArchive);
+    
+    // Show file date info
+    const fileDate = archivedOrder.fileDate ? new Date(archivedOrder.fileDate).toLocaleDateString('en-GB') : 'Unknown date';
+    console.log(`✅ Loaded archived order from ${archivedOrder.fileName} (${fileDate})`);
+  };
+
   return {
     pdfUploaded,
     setPdfUploaded,
@@ -685,5 +830,8 @@ export const useOrderData = () => {
     skuImageCsvInfo,
     handleSkuImageCsvUpload,
     clearSkuImageCsv,
+    // Archive functionality
+    handleLoadArchivedOrder,
+    isArchiveInitialized,
   };
 };
