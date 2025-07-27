@@ -6,11 +6,13 @@ import { FileWithImages } from '../types/Settings';
 import { selroApi } from '../services/selroApi';
 import { veeqoApi } from '../services/veeqoApi';
 import { archiveService } from '../services/archiveService';
-import { CsvColumnMapping, defaultCsvColumnMapping, SkuImageMap, SkuImageCsvInfo } from '../types/Csv';
+import { CsvColumnMapping, defaultCsvColumnMapping, LocalImagesFolderInfo } from '../types/Csv';
 import { VoiceSettings, defaultVoiceSettings } from '../types/VoiceSettings';
 import { StockTrackingItem } from '../types/StockTracking';
 import { CustomTag, defaultCustomTags } from '../types/CustomTags';
-import { parseCsvFile, parseSkuImageCsv } from '../utils/csvUtils';
+import { PackagingRule, defaultPackagingRules, defaultPackagingTypes } from '../types/Packaging';
+import { evaluatePackagingRules } from '../utils/packagingRules';
+import { parseCsvFile } from '../utils/csvUtils';
 
 export const useOrderData = () => {
   const [pdfUploaded, setPdfUploaded] = useState(false);
@@ -31,13 +33,23 @@ export const useOrderData = () => {
   const [customTags, setCustomTags] = useState<CustomTag[]>(defaultCustomTags);
   const [selectedSelroTag, setSelectedSelroTag] = useState<string>('all');
   const [selectedVeeqoTag, setSelectedVeeqoTag] = useState<string>('all');
+  
+  // Packaging rules state
+  const [packagingRules, setPackagingRules] = useState<PackagingRule[]>(defaultPackagingRules);
+  const [customPackagingTypes, setCustomPackagingTypes] = useState<string[]>(defaultPackagingTypes);
+  const [currentOrderPackagingType, setCurrentOrderPackagingType] = useState<string | null>(null);
 
-  // SKU-Image CSV state
-  const [skuImageMap, setSkuImageMap] = useState<SkuImageMap>({});
-  const [skuImageCsvInfo, setSkuImageCsvInfo] = useState<SkuImageCsvInfo | null>(null);
+  // Local images folder state
+  const [csvImagesFolderHandle, setCsvImagesFolderHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [csvImagesFolderInfo, setCsvImagesFolderInfo] = useState<LocalImagesFolderInfo | null>(null);
 
   // Archive state
   const [isArchiveInitialized, setIsArchiveInitialized] = useState(false);
+
+  // Other settings state
+  const [autoCompleteEnabled, setAutoCompleteEnabled] = useState(false);
+  const [lastScannedData, setLastScannedData] = useState<string>('');
+  const [searchMessage, setSearchMessage] = useState<string>('');
 
   // Initialize archive system on component mount
   useEffect(() => {
@@ -144,30 +156,49 @@ export const useOrderData = () => {
     if (savedVeeqoTag) {
       setSelectedVeeqoTag(savedVeeqoTag);
     }
-
-    // Load saved SKU-Image map and info
-    const savedSkuImageMap = localStorage.getItem('skuImageMap');
-    const savedSkuImageCsvInfo = localStorage.getItem('skuImageCsvInfo');
     
-    if (savedSkuImageMap) {
+    // Load saved packaging rules
+    const savedPackagingRules = localStorage.getItem('packagingRules');
+    if (savedPackagingRules) {
       try {
-        const parsedSkuImageMap = JSON.parse(savedSkuImageMap);
-        console.log('🖼️ Loaded saved SKU-Image map from localStorage:', Object.keys(parsedSkuImageMap).length, 'entries');
-        setSkuImageMap(parsedSkuImageMap);
+        const parsedPackagingRules = JSON.parse(savedPackagingRules);
+        console.log('📦 Loaded saved packaging rules from localStorage:', parsedPackagingRules);
+        setPackagingRules(parsedPackagingRules);
       } catch (e) {
-        console.error('Failed to parse saved SKU-Image map, using empty:', e);
-        setSkuImageMap({});
+        console.error('Failed to parse saved packaging rules, using default:', e);
+        setPackagingRules(defaultPackagingRules);
       }
     }
-    
-    if (savedSkuImageCsvInfo) {
+
+    // Load saved custom packaging types
+    const savedPackagingTypes = localStorage.getItem('customPackagingTypes');
+    if (savedPackagingTypes) {
       try {
-        const parsedSkuImageCsvInfo = JSON.parse(savedSkuImageCsvInfo);
-        console.log('🖼️ Loaded saved SKU-Image CSV info from localStorage:', parsedSkuImageCsvInfo);
-        setSkuImageCsvInfo(parsedSkuImageCsvInfo);
+        const parsedPackagingTypes = JSON.parse(savedPackagingTypes);
+        console.log('📦 Loaded saved packaging types from localStorage:', parsedPackagingTypes);
+        setCustomPackagingTypes(parsedPackagingTypes);
       } catch (e) {
-        console.error('Failed to parse saved SKU-Image CSV info, using null:', e);
-        setSkuImageCsvInfo(null);
+        console.error('Failed to parse saved packaging types, using default:', e);
+        setCustomPackagingTypes(defaultPackagingTypes);
+      }
+    }
+    // Load other settings
+    const savedAutoComplete = localStorage.getItem('autoCompleteEnabled');
+    if (savedAutoComplete) {
+      setAutoCompleteEnabled(JSON.parse(savedAutoComplete));
+    }
+
+    // Load saved CSV images folder info
+    const savedCsvImagesFolderInfo = localStorage.getItem('csvImagesFolderInfo');
+    
+    if (savedCsvImagesFolderInfo) {
+      try {
+        const parsedCsvImagesFolderInfo = JSON.parse(savedCsvImagesFolderInfo);
+        console.log('🖼️ Loaded saved CSV images folder info from localStorage:', parsedCsvImagesFolderInfo);
+        setCsvImagesFolderInfo(parsedCsvImagesFolderInfo);
+      } catch (e) {
+        console.error('Failed to parse saved CSV images folder info, using null:', e);
+        setCsvImagesFolderInfo(null);
       }
     }
 
@@ -195,6 +226,17 @@ export const useOrderData = () => {
       setCurrentOrderIndex(-1);
     }
   }, [currentOrder, orders]);
+
+  // Evaluate packaging rules when current order changes
+  useEffect(() => {
+    if (currentOrder && packagingRules.length > 0) {
+      const packagingType = evaluatePackagingRules(currentOrder, packagingRules);
+      setCurrentOrderPackagingType(packagingType);
+      console.log('📦 Determined packaging type for current order:', packagingType);
+    } else {
+      setCurrentOrderPackagingType(null);
+    }
+  }, [currentOrder, packagingRules]);
 
   // Archive orders when they are loaded (with file name extraction)
   const archiveOrdersWithFileName = async (ordersToArchive: Order[], sourceFile?: File) => {
@@ -252,41 +294,48 @@ export const useOrderData = () => {
       loadOrdersFromVeeqo(selectedVeeqoStatus, selectedVeeqoWarehouseId, tagName === 'all' ? undefined : tagName);
     }
   };
-
-  // SKU-Image CSV management
-  const handleSkuImageCsvUpload = async (file: File) => {
-    try {
-      console.log('🖼️ Processing SKU-Image CSV file:', file.name);
-      
-      const newSkuImageMap = await parseSkuImageCsv(file);
-      const newCsvInfo: SkuImageCsvInfo = {
-        fileName: file.name,
-        uploadedAt: new Date().toISOString(),
-        skuCount: Object.keys(newSkuImageMap).length
-      };
-
-      setSkuImageMap(newSkuImageMap);
-      setSkuImageCsvInfo(newCsvInfo);
-
-      // Save to localStorage
-      localStorage.setItem('skuImageMap', JSON.stringify(newSkuImageMap));
-      localStorage.setItem('skuImageCsvInfo', JSON.stringify(newCsvInfo));
-
-      console.log(`✅ Successfully loaded ${newCsvInfo.skuCount} SKU-Image mappings from ${file.name}`);
-      
-      return newCsvInfo;
-    } catch (error) {
-      console.error('❌ Error processing SKU-Image CSV file:', error);
-      throw error;
-    }
+  
+  // Packaging rules management
+  const savePackagingRules = (rules: PackagingRule[]) => {
+    console.log('📦 Saving packaging rules to localStorage:', rules);
+    setPackagingRules(rules);
+    localStorage.setItem('packagingRules', JSON.stringify(rules));
   };
 
-  const clearSkuImageCsv = () => {
-    setSkuImageMap({});
-    setSkuImageCsvInfo(null);
-    localStorage.removeItem('skuImageMap');
-    localStorage.removeItem('skuImageCsvInfo');
-    console.log('🖼️ Cleared SKU-Image CSV data');
+  // Custom packaging types management
+  const saveCustomPackagingTypes = (types: string[]) => {
+    console.log('📦 Saving custom packaging types to localStorage:', types);
+    setCustomPackagingTypes(types);
+    localStorage.setItem('customPackagingTypes', JSON.stringify(types));
+  };
+  // CSV Images Folder management
+  const setCsvImagesFolder = async () => {
+    try {
+      console.log('🖼️ Selecting CSV images folder...');
+      
+      const folderHandle = await window.showDirectoryPicker({
+        mode: 'read',
+        startIn: 'documents'
+      });
+      
+      const newFolderInfo: LocalImagesFolderInfo = {
+        folderName: folderHandle.name,
+        selectedAt: new Date().toISOString()
+      };
+
+      setCsvImagesFolderHandle(folderHandle);
+      setCsvImagesFolderInfo(newFolderInfo);
+
+      // Save to localStorage
+      localStorage.setItem('csvImagesFolderInfo', JSON.stringify(newFolderInfo));
+
+      console.log(`✅ Successfully selected images folder: ${folderHandle.name}`);
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('❌ Error selecting images folder:', error);
+        throw error;
+      }
+    }
   };
 
   // Handle Selro folder selection
@@ -446,7 +495,7 @@ export const useOrderData = () => {
   const handleCsvFileUpload = async (file: File, mappings: CsvColumnMapping) => {
     try {
       console.log('🚀 Processing CSV file:', file.name, 'with mappings:', mappings);
-      console.log('🖼️ Using SKU-Image map with', Object.keys(skuImageMap).length, 'entries');
+      console.log('🖼️ Using images folder:', csvImagesFolderHandle?.name || 'None selected');
       
       // Ensure mappings are saved before processing
       saveCsvMappings(mappings);
@@ -455,8 +504,8 @@ export const useOrderData = () => {
       const fileDate = new Date(file.lastModified).toISOString();
       console.log('📅 File date extracted:', fileDate);
       
-      // Pass the SKU-Image map and file date to the CSV parser
-      const parsedOrders = await parseCsvFile(file, mappings, skuImageMap || {}, fileDate);
+      // Pass the images folder handle and file date to the CSV parser
+      const parsedOrders = await parseCsvFile(file, mappings, csvImagesFolderHandle || undefined, fileDate);
 
       if (parsedOrders.length === 0) {
         throw new Error('No orders found in the uploaded CSV file. Please check your column mappings and ensure the CSV has data rows.');
@@ -584,6 +633,8 @@ export const useOrderData = () => {
   const handleCustomerSearch = async (searchTerm: string) => {
     if (!searchTerm) return;
     
+    setSearchMessage(''); // Clear previous message
+    
     try {
       let foundOrder: Order | null = null;
       
@@ -638,6 +689,7 @@ export const useOrderData = () => {
       
       if (foundOrder) {
         setCurrentOrder(foundOrder);
+        setSearchMessage(''); // Clear message on success
         console.log('Found order for search term:', searchTerm, 'Order:', foundOrder.orderNumber);
       } else {
         // If not found in current orders, search the archive
@@ -659,7 +711,7 @@ export const useOrderData = () => {
                 quantity: archivedOrder.quantity,
                 location: archivedOrder.location,
                 imageUrl: archivedOrder.imageUrl,
-                additionalDetails: archivedOrder.additionalDetails,
+                itemName: archivedOrder.itemName,
                 buyerPostcode: archivedOrder.buyerPostcode,
                 remainingStock: archivedOrder.remainingStock,
                 orderValue: archivedOrder.orderValue,
@@ -676,6 +728,7 @@ export const useOrderData = () => {
               
               setCurrentOrder(orderFromArchive);
               
+              setSearchMessage(''); // Clear message on success
               // Show a notification that this order was found in archive
               const fileDate = archivedOrder.fileDate ? new Date(archivedOrder.fileDate).toLocaleDateString('en-GB') : 'Unknown date';
               console.log(`📋 Loaded archived order from ${archivedOrder.fileName} (${fileDate})`);
@@ -684,16 +737,20 @@ export const useOrderData = () => {
               // You could add a toast notification here if you implement one
               
             } else {
+              setSearchMessage(`No order found for "${searchTerm}"`);
               console.log('No order found for search term:', searchTerm);
             }
           } catch (error) {
+            setSearchMessage(`No order found for "${searchTerm}"`);
             console.error('Error searching archive:', error);
           }
         } else {
+          setSearchMessage(`No order found for "${searchTerm}"`);
           console.log('Archive not initialized, cannot search');
         }
       }
     } catch (error) {
+      setSearchMessage(`Error searching for "${searchTerm}"`);
       console.error('Error searching:', error);
     }
   };
@@ -713,6 +770,13 @@ export const useOrderData = () => {
     setCurrentOrderIndex(newIndex);
     setCurrentOrder(orders[newIndex]);
     console.log(`🔄 Arrow navigation: ${direction}, new index: ${newIndex}, order: ${orders[newIndex].orderNumber}`);
+  };
+
+  // Save other settings
+  const saveOtherSettings = (settings: { autoCompleteEnabled: boolean }) => {
+    setAutoCompleteEnabled(settings.autoCompleteEnabled);
+    localStorage.setItem('autoCompleteEnabled', JSON.stringify(settings.autoCompleteEnabled));
+    console.log('💾 Saved other settings:', settings);
   };
 
   // Handle order completion
@@ -764,7 +828,7 @@ export const useOrderData = () => {
       quantity: archivedOrder.quantity,
       location: archivedOrder.location,
       imageUrl: archivedOrder.imageUrl,
-      additionalDetails: archivedOrder.additionalDetails,
+      itemName: archivedOrder.itemName,
       buyerPostcode: archivedOrder.buyerPostcode,
       remainingStock: archivedOrder.remainingStock,
       orderValue: archivedOrder.orderValue,
@@ -825,13 +889,23 @@ export const useOrderData = () => {
     selectedVeeqoTag,
     handleSelectSelroTag,
     handleSelectVeeqoTag,
-    // SKU-Image CSV functionality
-    skuImageMap,
-    skuImageCsvInfo,
-    handleSkuImageCsvUpload,
-    clearSkuImageCsv,
+    // CSV Images Folder functionality
+    csvImagesFolderHandle,
+    csvImagesFolderInfo,
+    setCsvImagesFolder,
     // Archive functionality
     handleLoadArchivedOrder,
     isArchiveInitialized,
+    // Packaging rules
+    packagingRules,
+    savePackagingRules,
+    customPackagingTypes,
+    saveCustomPackagingTypes,
+    currentOrderPackagingType,
+    // Other settings
+    autoCompleteEnabled,
+    saveOtherSettings,
+    searchMessage,
+    setSearchMessage,
   };
 };

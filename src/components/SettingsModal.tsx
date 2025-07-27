@@ -1,19 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X, Upload, Server, FileText, Volume2, Package, Warehouse, Tag, Archive } from 'lucide-react';
+import { Settings, X, Upload, Server, FileText, Volume2, Package, Warehouse, Tag, Archive, Sliders, Truck } from 'lucide-react';
 import { FileWithImages } from '../types/Settings';
 import { ArchivedOrder } from '../types/Archive';
+import { PackagingRule } from '../types/Packaging';
 import { SelroSettings } from './SelroSettings';
 import { VeeqoSettings } from './VeeqoSettings';
 import { CsvSettings } from './CsvSettings';
 import { VoiceSettingsComponent } from './VoiceSettings';
 import { StockTrackingTab } from './StockTrackingTab';
 import { CustomTagSettings } from './CustomTagSettings';
+import { PackagingRulesSettings } from './PackagingRulesSettings';
 import { ArchiveSettings } from './ArchiveSettings';
-import { CsvColumnMapping } from '../types/Csv';
+import { OtherSettings } from './OtherSettings';
+import { CsvColumnMapping, LocalImagesFolderInfo } from '../types/Csv';
 import { VoiceSettings } from '../types/VoiceSettings';
 import { StockTrackingItem } from '../types/StockTracking';
 import { CustomTag } from '../types/CustomTags';
-import { SkuImageCsvInfo } from '../types/Csv';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -42,12 +44,19 @@ interface SettingsModalProps {
   selectedVeeqoTag?: string;
   onSelectSelroTag?: (tagName: string) => void;
   onSelectVeeqoTag?: (tagName: string) => void;
-  // SKU-Image CSV props
-  skuImageCsvInfo?: SkuImageCsvInfo | null;
-  onSkuImageCsvUpload?: (file: File) => Promise<SkuImageCsvInfo>;
-  onClearSkuImageCsv?: () => void;
+  // CSV Images Folder props
+  csvImagesFolderInfo?: LocalImagesFolderInfo | null;
+  onSetCsvImagesFolder?: () => Promise<void>;
   // Archive props
   onLoadArchivedOrder?: (order: ArchivedOrder) => void;
+  // Packaging rules props
+  packagingRules?: PackagingRule[];
+  onSavePackagingRules?: (rules: PackagingRule[]) => void;
+  customPackagingTypes?: string[];
+  onSaveCustomPackagingTypes?: (types: string[]) => void;
+  // Other settings props
+  autoCompleteEnabled?: boolean;
+  onSaveOtherSettings?: (settings: { autoCompleteEnabled: boolean }) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -76,12 +85,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   selectedVeeqoTag,
   onSelectSelroTag = () => {},
   onSelectVeeqoTag = () => {},
-  skuImageCsvInfo,
-  onSkuImageCsvUpload,
-  onClearSkuImageCsv,
+  csvImagesFolderInfo,
+  onSetCsvImagesFolder,
   onLoadArchivedOrder,
+  packagingRules = [],
+  onSavePackagingRules = () => {},
+  customPackagingTypes = [],
+  onSaveCustomPackagingTypes = () => {},
+  autoCompleteEnabled = false,
+  onSaveOtherSettings,
 }) => {
-  const [activeTab, setActiveTab] = useState<'archive' | 'tags' | 'selro' | 'veeqo' | 'files' | 'csv' | 'voice' | 'stock'>('archive');
+  const [activeTab, setActiveTab] = useState<'archive' | 'tags' | 'packaging' | 'selro' | 'veeqo' | 'files' | 'csv' | 'voice' | 'stock' | 'other'>('archive');
 
   if (!isOpen) return null;
 
@@ -128,6 +142,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center gap-2">
                 <Tag className="h-4 w-4" />
                 Custom Tags
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('packaging')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === 'packaging'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Truck className="h-4 w-4" />
+                Packaging Rules
               </div>
             </button>
             <button
@@ -213,6 +240,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 )}
               </div>
             </button>
+            <button
+              onClick={() => setActiveTab('other')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === 'other'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Sliders className="h-4 w-4" />
+                Other Settings
+              </div>
+            </button>
           </nav>
         </div>
 
@@ -231,6 +271,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               selectedVeeqoTag={selectedVeeqoTag}
               onSelectSelroTag={onSelectSelroTag}
               onSelectVeeqoTag={onSelectVeeqoTag}
+            />
+          )}
+
+          {activeTab === 'packaging' && (
+            <PackagingRulesSettings
+              rules={packagingRules}
+              onSaveRules={onSavePackagingRules}
+              customPackagingTypes={customPackagingTypes}
+              onSavePackagingTypes={onSaveCustomPackagingTypes}
             />
           )}
 
@@ -263,9 +312,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               onCsvUpload={onCsvUpload}
               onSaveMappings={onSaveCsvMappings}
               savedMappings={savedCsvMappings}
-              skuImageCsvInfo={skuImageCsvInfo}
-              onSkuImageCsvUpload={onSkuImageCsvUpload}
-              onClearSkuImageCsv={onClearSkuImageCsv}
+              csvImagesFolderInfo={csvImagesFolderInfo}
+              onSetCsvImagesFolder={onSetCsvImagesFolder}
             />
           )}
 
@@ -281,6 +329,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               trackedItems={stockTrackingItems}
               onRemoveItem={onRemoveStockItem}
               onClearAll={onClearAllStockItems}
+            />
+          )}
+
+          {activeTab === 'other' && (
+            <OtherSettings
+              autoCompleteEnabled={autoCompleteEnabled}
+              onSaveSettings={onSaveOtherSettings || (() => {})}
             />
           )}
         </div>

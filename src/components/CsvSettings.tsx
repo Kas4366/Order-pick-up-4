@@ -1,25 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Map, Save, AlertCircle, CheckCircle, Image, Hash, RefreshCw, Package, Trash2, Download, DollarSign, Store, Truck } from 'lucide-react';
-import { CsvColumnMapping, CsvField, defaultCsvColumnMapping, SkuImageCsvInfo } from '../types/Csv';
+import { CsvColumnMapping, CsvField, defaultCsvColumnMapping, LocalImagesFolderInfo } from '../types/Csv';
 import { getCsvHeaders } from '../utils/csvUtils';
 
 interface CsvSettingsProps {
   onCsvUpload: (file: File, mappings: CsvColumnMapping) => void;
   onSaveMappings: (mappings: CsvColumnMapping) => void;
   savedMappings: CsvColumnMapping;
-  // SKU-Image CSV props
-  skuImageCsvInfo?: SkuImageCsvInfo | null;
-  onSkuImageCsvUpload?: (file: File) => Promise<SkuImageCsvInfo>;
-  onClearSkuImageCsv?: () => void;
+  // Local images folder props
+  csvImagesFolderInfo?: LocalImagesFolderInfo | null;
+  onSetCsvImagesFolder?: () => Promise<void>;
 }
 
 export const CsvSettings: React.FC<CsvSettingsProps> = ({
   onCsvUpload,
   onSaveMappings,
   savedMappings,
-  skuImageCsvInfo,
-  onSkuImageCsvUpload,
-  onClearSkuImageCsv,
+  csvImagesFolderInfo,
+  onSetCsvImagesFolder,
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
@@ -27,10 +25,8 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
-  // SKU-Image CSV state
-  const [selectedSkuImageFile, setSelectedSkuImageFile] = useState<File | null>(null);
-  const [isProcessingSkuImage, setIsProcessingSkuImage] = useState(false);
-  const [skuImageMessage, setSkuImageMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  // Local images folder state
+  const [folderMessage, setFolderMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const mappableFields: { key: CsvField; label: string; required: boolean; icon?: React.ReactNode; description?: string }[] = [
     { key: 'orderNumber', label: 'Order Number/ID', required: true, icon: <Hash className="h-4 w-4" />, description: 'Unique identifier for the order (e.g., "number" column)' },
@@ -45,7 +41,9 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
     { key: 'orderValue', label: 'Order Value', required: false, icon: <DollarSign className="h-4 w-4" />, description: 'Monetary value of the order item (optional)' },
     { key: 'channelType', label: 'Channel Type', required: false, icon: <Store className="h-4 w-4" />, description: 'Sales channel type (e.g., eBay, Amazon, Etsy, BigCommerce) (optional)' },
     { key: 'channel', label: 'Channel', required: false, icon: <Store className="h-4 w-4" />, description: 'Specific channel information' },
-    { key: 'packagingType', label: 'Packaging Type', required: false, icon: <Truck className="h-4 w-4" />, description: 'Type of packaging required for the order' },
+    { key: 'width', label: 'Width (cm)', required: false, icon: <Package className="h-4 w-4" />, description: 'Product width in centimeters (for packaging rules)' },
+    { key: 'weight', label: 'Weight (g)', required: false, icon: <Package className="h-4 w-4" />, description: 'Product weight in grams (for packaging rules)' },
+    { key: 'itemName', label: 'Item/Product Name', required: false, description: 'Product or item name/title (optional)' },
   ];
 
   // Initialize with saved mappings
@@ -73,56 +71,24 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
     }
   };
 
-  const handleSkuImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setSelectedSkuImageFile(file);
-      setSkuImageMessage(null);
-    }
-  };
-
-  const handleSkuImageUpload = async () => {
-    if (!selectedSkuImageFile || !onSkuImageCsvUpload) {
-      setSkuImageMessage({ type: 'error', text: 'Please select a SKU-Image CSV file first.' });
+  const handleSelectImagesFolder = async () => {
+    if (!onSetCsvImagesFolder) {
+      setFolderMessage({ type: 'error', text: 'Folder selection not available.' });
       return;
     }
 
-    setIsProcessingSkuImage(true);
-    setSkuImageMessage(null);
-    
     try {
-      console.log('🖼️ Uploading SKU-Image CSV:', selectedSkuImageFile.name);
-      
-      const csvInfo = await onSkuImageCsvUpload(selectedSkuImageFile);
-      setSkuImageMessage({ 
+      await onSetCsvImagesFolder();
+      setFolderMessage({ 
         type: 'success', 
-        text: `Successfully uploaded ${csvInfo.skuCount} SKU-Image mappings from ${csvInfo.fileName}!` 
+        text: 'Images folder selected successfully!' 
       });
-      setSelectedSkuImageFile(null);
-      
-      // Reset file input
-      const fileInput = document.getElementById('sku-image-file-input') as HTMLInputElement;
-      if (fileInput) {
-        fileInput.value = '';
-      }
-      
     } catch (error) {
-      console.error('Error uploading SKU-Image CSV:', error);
-      setSkuImageMessage({ 
+      console.error('Error selecting images folder:', error);
+      setFolderMessage({ 
         type: 'error', 
-        text: `Failed to process SKU-Image CSV: ${error instanceof Error ? error.message : 'Unknown error'}` 
+        text: `Failed to select images folder: ${error instanceof Error ? error.message : 'Unknown error'}` 
       });
-    } finally {
-      setIsProcessingSkuImage(false);
-    }
-  };
-
-  const handleClearSkuImageCsv = () => {
-    if (confirm('Are you sure you want to clear the SKU-Image CSV data? This will remove all image URL fallbacks.')) {
-      if (onClearSkuImageCsv) {
-        onClearSkuImageCsv();
-        setSkuImageMessage({ type: 'success', text: 'SKU-Image CSV data cleared successfully.' });
-      }
     }
   };
 
@@ -159,7 +125,8 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
         orderValue: ['order value', 'order_value', 'value', 'price', 'amount', 'total', 'cost', 'item value', 'item_value', 'unit price', 'unit_price'],
         channelType: ['channel type', 'channel_type', 'sales channel', 'sales_channel', 'marketplace', 'platform', 'source'],
         channel: ['channel', 'sales channel name', 'channel name', 'marketplace name', 'platform name'],
-        packagingType: ['packaging type', 'packaging_type', 'package type', 'package_type', 'packaging', 'package', 'shipping type', 'shipping_type']
+        packagingType: ['packaging type', 'packaging_type', 'package type', 'package_type', 'packaging', 'package', 'shipping type', 'shipping_type'],
+        itemName: ['product name', 'product_name', 'item name', 'item_name', 'title', 'product title', 'product_title', 'item title', 'item_title', 'description', 'product description']
       };
       
       const variations = headerVariations[field.key] || [field.key];
@@ -278,104 +245,72 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
           CSV File Upload
         </h3>
         <p className="text-gray-600 mb-4">
-          Upload order data from a CSV file. The system will automatically handle missing billing address names by using shipping address names as fallback.
+          Upload order data from a CSV file. Images will be loaded from your selected local images folder using SKU as filename.
         </p>
       </div>
 
-      {/* SKU-Image CSV Section */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-        <h4 className="text-md font-semibold text-blue-800 mb-4 flex items-center gap-2">
+      {/* Local Images Folder Section */}
+      <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+        <h4 className="text-md font-semibold text-green-800 mb-4 flex items-center gap-2">
           <Image className="h-5 w-5" />
-          SKU-Image CSV (Image URL Fallback)
+          Local Images Folder
         </h4>
         
-        <p className="text-blue-700 mb-4 text-sm">
-          Upload a separate CSV file with SKU-to-image URL mappings. This will be used as a fallback when the main order CSV doesn't have image URLs.
+        <p className="text-green-700 mb-4 text-sm">
+          Select a local folder containing product images. Images should be named using the SKU (e.g., "ABC123.jpg", "XYZ456.png").
           <br />
-          <strong>Expected format:</strong> First column = SKU, Second column = Image URL
+          <strong>Supported formats:</strong> JPG, JPEG, PNG, GIF, WEBP, BMP, SVG
         </p>
 
-        {/* Current SKU-Image CSV Info */}
-        {skuImageCsvInfo && (
-          <div className="bg-blue-100 border border-blue-300 rounded-lg p-4 mb-4">
+        {/* Current Images Folder Info */}
+        {csvImagesFolderInfo && (
+          <div className="bg-green-100 border border-green-300 rounded-lg p-4 mb-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium text-blue-800">Current SKU-Image CSV:</p>
-                <p className="text-sm text-blue-700">{skuImageCsvInfo.fileName}</p>
-                <p className="text-xs text-blue-600">
-                  {skuImageCsvInfo.skuCount} SKU mappings • Uploaded {formatDate(skuImageCsvInfo.uploadedAt)}
+                <p className="font-medium text-green-800">Selected Images Folder:</p>
+                <p className="text-sm text-green-700">{csvImagesFolderInfo.folderName}</p>
+                <p className="text-xs text-green-600">
+                  Selected {formatDate(csvImagesFolderInfo.selectedAt)}
                 </p>
               </div>
-              <button
-                onClick={handleClearSkuImageCsv}
-                className="flex items-center gap-2 px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
-                title="Clear SKU-Image CSV data"
-              >
-                <Trash2 className="h-3 w-3" />
-                Clear
-              </button>
             </div>
           </div>
         )}
 
-        {/* SKU-Image CSV Upload */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <input
-              id="sku-image-file-input"
-              type="file"
-              accept=".csv"
-              onChange={handleSkuImageFileChange}
-              className="hidden"
-            />
-            <label
-              htmlFor="sku-image-file-input"
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
-            >
-              <Upload className="h-4 w-4" />
-              {selectedSkuImageFile ? selectedSkuImageFile.name : 'Choose SKU-Image CSV'}
-            </label>
-            
-            {selectedSkuImageFile && (
-              <button
-                onClick={handleSkuImageUpload}
-                disabled={isProcessingSkuImage}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-              >
-                {isProcessingSkuImage ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4" />
-                    Upload & Save
-                  </>
-                )}
-              </button>
-            )}
-          </div>
+        {/* Folder Selection */}
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={handleSelectImagesFolder}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            <Image className="h-4 w-4" />
+            {csvImagesFolderInfo ? 'Change Images Folder' : 'Select Images Folder'}
+          </button>
+        </div>
 
-          {/* SKU-Image Messages */}
-          {skuImageMessage && (
-            <div className={`flex items-center gap-2 p-3 rounded-lg ${
-              skuImageMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            }`}>
-              {skuImageMessage.type === 'success' ? <CheckCircle className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
-              <span className="text-sm">{skuImageMessage.text}</span>
-            </div>
-          )}
-
-          {/* Example Format */}
-          <div className="bg-white border border-blue-200 rounded p-3">
-            <p className="text-xs font-medium text-blue-800 mb-2">Example SKU-Image CSV format:</p>
-            <div className="bg-gray-50 rounded border p-2 text-xs font-mono">
-              <div className="text-gray-600">SKU,Image URL</div>
-              <div className="text-gray-800">ABC-123,https://example.com/images/abc-123.jpg</div>
-              <div className="text-gray-800">XYZ-456,https://example.com/images/xyz-456.png</div>
-            </div>
+        {/* Folder Messages */}
+        {folderMessage && (
+          <div className={`flex items-center gap-2 p-3 rounded-lg ${
+            folderMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          }`}>
+            {folderMessage.type === 'success' ? <CheckCircle className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+            <span className="text-sm">{folderMessage.text}</span>
           </div>
+        )}
+
+        {/* Instructions */}
+        <div className="bg-white border border-green-200 rounded p-3">
+          <p className="text-xs font-medium text-green-800 mb-2">Image File Naming:</p>
+          <div className="bg-gray-50 rounded border p-2 text-xs">
+            <div className="text-gray-600 mb-1">Examples of valid image filenames:</div>
+            <div className="text-gray-800">• ABC-123.jpg</div>
+            <div className="text-gray-800">• XYZ456.png</div>
+            <div className="text-gray-800">• product123.jpeg</div>
+            <div className="text-gray-800">• ITEM-789.webp</div>
+          </div>
+          <p className="text-xs text-green-700 mt-2">
+            The app will try various filename combinations including exact SKU match, with/without special characters, and different cases.
+          </p>
         </div>
       </div>
 
@@ -552,7 +487,7 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
       <div className="bg-green-50 rounded-lg p-4">
         <h4 className="text-sm font-medium text-green-800 mb-2">Smart Features:</h4>
         <div className="text-xs text-green-700 space-y-1">
-          <p>✅ <strong>Image URL Fallback:</strong> If main CSV lacks image URLs, SKU-Image CSV will be used automatically</p>
+          <p>✅ <strong>Local Image Loading:</strong> Images are loaded from your selected local folder using SKU as filename</p>
           <p>✅ <strong>Customer Name Fallback:</strong> If billing address names are missing, shipping address names will be used</p>
           <p>✅ <strong>Flexible mapping:</strong> You can map to either billing_address_first_name or shipping_address_first_name</p>
           <p>✅ <strong>Order preservation:</strong> Orders are processed in the same order as your CSV file</p>
@@ -562,6 +497,7 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
           <p>✅ <strong>File date tracking:</strong> File modification date is automatically recorded for each order</p>
           <p>✅ <strong>Channel tracking:</strong> Map channel type and channel columns to display sales platform information</p>
           <p>✅ <strong>Packaging tracking:</strong> Map packaging type column to display packaging requirements</p>
+          <p>✅ <strong>Flexible image matching:</strong> Supports various filename formats and automatically finds the best match</p>
         </div>
       </div>
 
@@ -582,12 +518,14 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
           <p>• Quantity → "quantity"</p>
           <p>• Location → "bin_location"</p>
           <p>• Buyer Postcode → "billing_address_zip" (fallback: "shipping_address_zip")</p>
-          <p>• Image URL → "image_url" (fallback: SKU-Image CSV)</p>
+          <p>• Image URL → "image_url" (fallback: Local images folder)</p>
           <p>• Remaining Stock → "remaining_stock" (optional)</p>
           <p>• Order Value → "order_value" (optional)</p>
           <p>• Channel Type → "channel_type" (optional)</p>
           <p>• Channel → "channel" (optional)</p>
-          <p>• Packaging Type → "packaging_type" (optional)</p>
+          <p>• Width → "width" (optional)</p>
+          <p>• Weight → "weight" (optional)</p>
+          <p>• Item Name → "product_name" or "item_title" (optional)</p>
         </div>
       </div>
     </div>

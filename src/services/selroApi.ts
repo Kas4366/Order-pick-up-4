@@ -355,7 +355,7 @@ API Secret format should be: app4_secret[uuid]`);
             quantity: isNaN(quantity) ? 1 : quantity,
             location: String(location),
             imageUrl: String(imageUrl),
-            additionalDetails: String(productName),
+            itemName: String(productName),
             completed: false,
             // Add Selro-specific data for updates
             selroOrderId: String(selroOrder.id || ''),
@@ -467,7 +467,7 @@ API Secret format should be: app4_secret[uuid]`);
             quantity: isNaN(quantity) ? 1 : quantity,
             location: String(location),
             imageUrl: String(imageUrl),
-            additionalDetails: String(productName),
+            itemName: String(productName),
             completed: false,
             selroOrderId: String(selroOrder.id || ''),
             selroItemId: String(item.id || ''),

@@ -6,7 +6,7 @@ export interface ArchivedOrder {
   quantity: number;
   location: string;
   imageUrl?: string;
-  additionalDetails?: string;
+  itemName?: string;
   buyerPostcode?: string;
   remainingStock?: number;
   orderValue?: number;
@@ -19,7 +19,6 @@ export interface ArchivedOrder {
   channel?: string;
   // Packaging information
   packagingType?: string;
-  // API-specific fields
   selroOrderId?: string;
   selroItemId?: string;
   veeqoOrderId?: string;

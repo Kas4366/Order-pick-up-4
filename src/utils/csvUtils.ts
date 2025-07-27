@@ -1,5 +1,5 @@
 import { Order } from '../types/Order';
-import { CsvColumnMapping, CsvField, SkuImageMap } from '../types/Csv';
+import { CsvColumnMapping, CsvField } from '../types/Csv';
 
 /**
  * Robust CSV parser that handles quoted fields, commas within quotes, and newlines
@@ -66,91 +66,117 @@ function parseCsv(csvText: string): string[][] {
   return rows;
 }
 
-/**
- * Parses a SKU-Image CSV file and returns a map of SKU to image URL.
- * Expected format: First column = SKU, Second column = Image URL
- *
- * @param file The SKU-Image CSV file to parse.
- * @returns A Promise that resolves to a SkuImageMap object.
- */
-export const parseSkuImageCsv = async (file: File): Promise<SkuImageMap> => {
-  console.log('🖼️ Starting SKU-Image CSV parsing:', file.name);
+// Helper function to find and load image files from local folder
+async function findImageFile(
+  imagesFolderHandle: FileSystemDirectoryHandle, 
+  sku: string
+): Promise<string> {
+  console.log(`🔍 Starting image search for SKU: "${sku}"`);
+  console.log(`📁 Searching in folder: "${imagesFolderHandle.name}"`);
   
-  const text = await file.text();
-  const allRows = parseCsv(text);
-
-  console.log(`📄 SKU-Image CSV file has ${allRows.length} rows (including header)`);
-
-  if (allRows.length === 0) {
-    console.warn('⚠️ SKU-Image CSV file is empty');
-    return {};
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+  
+  // List of filenames to try
+  const filenamesToTry = [
+    sku, // Exact SKU match
+    sku.toLowerCase(), // Lowercase version
+    sku.toUpperCase(), // Uppercase version
+  ];
+  
+  // Also try with different extensions
+  const cleanSku = sku.replace(/[^a-zA-Z0-9]/g, ''); // Remove special characters
+  imageExtensions.forEach(ext => {
+    filenamesToTry.push(`${sku}.${ext}`);
+    filenamesToTry.push(`${cleanSku}.${ext}`);
+    filenamesToTry.push(`${sku.toLowerCase()}.${ext}`);
+    filenamesToTry.push(`${cleanSku.toLowerCase()}.${ext}`);
+    filenamesToTry.push(`${sku.toUpperCase()}.${ext}`);
+    filenamesToTry.push(`${cleanSku.toUpperCase()}.${ext}`);
+  });
+  
+  console.log(`🔍 Trying ${filenamesToTry.length} filename variations...`);
+  
+  // Try to find any of these filenames
+  for (const filename of filenamesToTry) {
+    try {
+      console.log(`🔍 Trying variation: "${filename}"`);
+      const imageFileHandle = await imagesFolderHandle.getFileHandle(filename);
+      const imageFile = await imageFileHandle.getFile();
+      
+      // Create a blob URL for the image
+      const imageUrl = URL.createObjectURL(imageFile);
+      console.log(`✅ Found match: "${filename}" (${imageFile.size} bytes)`);
+      return imageUrl;
+    } catch (error) {
+      // File not found, continue to next filename
+      continue;
+    }
   }
-
-  // Skip header row if it exists
-  const dataRows = allRows.length > 1 && 
-    (allRows[0][0]?.toLowerCase().includes('sku') || allRows[0][1]?.toLowerCase().includes('image'))
-    ? allRows.slice(1) 
-    : allRows;
-
-  console.log(`📄 Processing ${dataRows.length} data rows from SKU-Image CSV`);
-
-  const skuImageMap: SkuImageMap = {};
-  let processedCount = 0;
-
-  for (let i = 0; i < dataRows.length; i++) {
-    const values = dataRows[i];
-    const rowNumber = i + (allRows.length > dataRows.length ? 2 : 1); // Account for header
+  
+  // If no exact match found, try to list all files in the folder and find a partial match
+  try {
+    console.log('🔍 No exact match found, scanning all files in images folder...');
+    const allFiles: string[] = [];
     
-    if (values.length < 2) {
-      console.warn(`⚠️ Skipping row ${rowNumber} - insufficient columns (need at least 2)`);
-      continue;
+    for await (const [name, handle] of imagesFolderHandle.entries()) {
+      if (handle.kind === 'file') {
+        allFiles.push(name);
+      }
     }
-
-    const sku = values[0]?.trim();
-    const imageUrl = values[1]?.trim();
-
-    if (!sku || !imageUrl) {
-      console.warn(`⚠️ Skipping row ${rowNumber} - missing SKU or image URL`);
-      continue;
+    
+    console.log(`📁 Available image files (${allFiles.length}):`, allFiles.slice(0, 10), allFiles.length > 10 ? '...' : '');
+    
+    // Try to find a file that contains the SKU or part of the SKU
+    const skuLower = sku.toLowerCase();
+    const cleanSkuLower = cleanSku.toLowerCase();
+    
+    for (const fileName of allFiles) {
+      const fileNameLower = fileName.toLowerCase();
+      
+      // Check if filename contains the SKU or clean SKU
+      if (fileNameLower.includes(skuLower) || 
+          fileNameLower.includes(cleanSkuLower) ||
+          skuLower.includes(fileNameLower.split('.')[0])) {
+        try {
+          console.log(`🎯 Found potential match: "${fileName}"`);
+          const imageFileHandle = await imagesFolderHandle.getFileHandle(fileName);
+          const imageFile = await imageFileHandle.getFile();
+          const imageUrl = URL.createObjectURL(imageFile);
+          console.log(`✅ Successfully loaded image by partial match: "${fileName}"`);
+          return imageUrl;
+        } catch (error) {
+          continue;
+        }
+      }
     }
-
-    // Validate that the image URL looks like a URL
-    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://') && !imageUrl.startsWith('data:')) {
-      console.warn(`⚠️ Row ${rowNumber} - image URL doesn't look like a valid URL: ${imageUrl.substring(0, 50)}...`);
-      // Still add it in case it's a relative URL or other valid format
-    }
-
-    skuImageMap[sku] = imageUrl;
-    processedCount++;
-
-    console.log(`✅ Row ${rowNumber}: Mapped SKU "${sku}" to image URL`);
+    
+    console.warn(`⚠️ No image found for SKU: "${sku}" in folder with ${allFiles.length} files`);
+  } catch (error) {
+    console.error('❌ Error scanning images folder:', error);
   }
-
-  console.log(`✅ Successfully processed ${processedCount} SKU-Image mappings from ${dataRows.length} rows`);
-  console.log(`📊 Sample mappings:`, Object.keys(skuImageMap).slice(0, 5).map(sku => ({ sku, hasUrl: !!skuImageMap[sku] })));
-
-  return skuImageMap;
-};
+  
+  return '';
+}
 
 /**
  * Parses a CSV file and returns an array of Order objects based on the provided column mappings.
  * Groups orders by order number and customer name, preserving the original CSV order.
- * Uses SKU-Image map as fallback for image URLs.
+ * Uses local images folder to find images by SKU.
  *
  * @param file The CSV file to parse.
  * @param mappings An object mapping Order properties to CSV column headers.
- * @param skuImageMap Optional map of SKU to image URL for fallback.
+ * @param imagesFolderHandle Optional handle to local images folder.
  * @param fileDate Optional file date to assign to all orders.
  * @returns A Promise that resolves to an array of Order objects.
  */
 export const parseCsvFile = async (
   file: File, 
   mappings: CsvColumnMapping, 
-  skuImageMap?: SkuImageMap,
+  imagesFolderHandle?: FileSystemDirectoryHandle,
   fileDate: string = new Date().toISOString()
 ): Promise<Order[]> => {
   console.log('🔍 Starting CSV parsing with mappings:', mappings);
-  console.log('🖼️ SKU-Image map available:', !!skuImageMap, skuImageMap ? `(${Object.keys(skuImageMap).length} entries)` : '');
+  console.log('🖼️ Images folder available:', !!imagesFolderHandle, imagesFolderHandle ? `(${imagesFolderHandle.name})` : '');
   console.log('📅 File date:', fileDate || 'Not provided');
   
   const text = await file.text();
@@ -187,7 +213,6 @@ export const parseCsvFile = async (
   // Process all data rows (skip header)
   const dataRows = allRows.slice(1);
   const rawOrders: any[] = [];
-  let imageUrlFallbackCount = 0;
 
   for (let i = 0; i < dataRows.length; i++) {
     const values = dataRows[i];
@@ -224,7 +249,9 @@ export const parseCsvFile = async (
     const orderValueStr = extractValue('orderValue');
     const channelType = extractValue('channelType');
     const channel = extractValue('channel');
-    const packagingType = extractValue('packagingType');
+    const widthStr = extractValue('width');
+    const weightStr = extractValue('weight');
+    const itemName = extractValue('itemName');
 
     console.log(`🔍 Row ${rowNumber} extracted values:`, {
       orderNumber,
@@ -239,7 +266,9 @@ export const parseCsvFile = async (
       orderValueStr,
       channelType,
       channel,
-      packagingType
+      widthStr,
+      weightStr,
+      itemName
     });
 
     // Build customer name from first and last name
@@ -273,15 +302,18 @@ export const parseCsvFile = async (
       continue;
     }
 
-    // Handle image URL fallback logic
-    if (!imageUrl && skuImageMap && Object.keys(skuImageMap).length > 0 && sku) {
-      const fallbackImageUrl = skuImageMap[sku];
-      if (fallbackImageUrl) {
-        imageUrl = fallbackImageUrl;
-        imageUrlFallbackCount++;
-        console.log(`🖼️ Row ${rowNumber}: Using fallback image URL for SKU "${sku}"`);
-      } else {
-        console.log(`🖼️ Row ${rowNumber}: No fallback image URL found for SKU "${sku}"`);
+    // Handle local image folder lookup
+    if (!imageUrl && imagesFolderHandle && sku) {
+      try {
+        const localImageUrl = await findImageFile(imagesFolderHandle, sku);
+        if (localImageUrl) {
+          imageUrl = localImageUrl;
+          console.log(`🖼️ Row ${rowNumber}: Found local image for SKU "${sku}"`);
+        } else {
+          console.log(`🖼️ Row ${rowNumber}: No local image found for SKU "${sku}"`);
+        }
+      } catch (error) {
+        console.log(`🖼️ Row ${rowNumber}: Error finding local image for SKU "${sku}":`, error);
       }
     }
 
@@ -313,6 +345,26 @@ export const parseCsvFile = async (
       }
     }
 
+    // Parse width and weight
+    let width: number | undefined = undefined;
+    let weight: number | undefined = undefined;
+    
+    if (widthStr) {
+      const parsedWidth = parseFloat(widthStr);
+      if (!isNaN(parsedWidth)) {
+        width = parsedWidth;
+        console.log(`📏 Extracted width for ${sku}: ${width}cm`);
+      }
+    }
+    
+    if (weightStr) {
+      const parsedWeight = parseFloat(weightStr);
+      if (!isNaN(parsedWeight)) {
+        weight = parsedWeight;
+        console.log(`⚖️ Extracted weight for ${sku}: ${weight}g`);
+      }
+    }
+
     // Store raw order data with original index for sorting
     rawOrders.push({
       orderNumber: orderNumber,
@@ -327,7 +379,9 @@ export const parseCsvFile = async (
       fileDate: fileDate,
       channelType: channelType,
       channel: channel || '',
-      packagingType: packagingType,
+      width: width,
+      weight: weight,
+      itemName: itemName,
       originalIndex: i, // Store original CSV row index
     });
 
@@ -345,12 +399,13 @@ export const parseCsvFile = async (
       fileDate: fileDate,
       channelType: channelType || '',
       channel: channel || '',
-      packagingType: packagingType || '',
+      width: width,
+      weight: weight,
+      itemName: itemName,
     });
   }
 
   console.log(`📊 Collected ${rawOrders.length} valid orders from ${dataRows.length} CSV rows`);
-  console.log(`🖼️ Used fallback image URLs for ${imageUrlFallbackCount} orders`);
 
   if (rawOrders.length === 0) {
     console.error('❌ No valid orders found in CSV. Check your column mappings and ensure the CSV has data rows.');
@@ -403,7 +458,9 @@ export const parseCsvFile = async (
         fileDate: fileDate,
         channelType: rawOrder.channelType || '',
         channel: rawOrder.channel || '',
-        packagingType: rawOrder.packagingType || '',
+        width: rawOrder.width,
+        weight: rawOrder.weight,
+        itemName: rawOrder.itemName,
         completed: false,
       };
 
@@ -422,13 +479,15 @@ export const parseCsvFile = async (
         fileDate: order.fileDate,
         channelType: order.channelType,
         channel: order.channel,
-        packagingType: order.packagingType
+        width: order.width,
+        weight: order.weight,
+        itemName: order.itemName
       });
     }
   }
 
   console.log(`✅ Successfully processed ${finalOrders.length} final orders`);
-  console.log(`🖼️ Final image URL statistics: ${finalOrders.filter(o => !!o.imageUrl).length} orders have images (${imageUrlFallbackCount} from fallback)`);
+  console.log(`🖼️ Final image URL statistics: ${finalOrders.filter(o => !!o.imageUrl).length} orders have images`);
   console.log(`💰 Final order value statistics: ${finalOrders.filter(o => o.orderValue !== undefined).length} orders have values`);
 
   // Log summary
@@ -445,11 +504,11 @@ export const parseCsvFile = async (
   console.log(`  👥 Unique customers: ${customerCounts.size}`);
   console.log(`  🔢 Unique order numbers: ${orderCounts.size}`);
   console.log(`  🖼️ Orders with images: ${finalOrders.filter(o => !!o.imageUrl).length}`);
-  console.log(`  🖼️ Images from fallback: ${imageUrlFallbackCount}`);
   console.log(`  💰 Orders with values: ${finalOrders.filter(o => o.orderValue !== undefined).length}`);
   console.log(`  📅 File date: ${fileDate || 'Not provided'}`);
   console.log(`  🏪 Orders with channel type: ${finalOrders.filter(o => o.channelType).length}`);
-  console.log(`  📦 Orders with packaging type: ${finalOrders.filter(o => o.packagingType).length}`);
+  console.log(`  📏 Orders with width: ${finalOrders.filter(o => o.width !== undefined).length}`);
+  console.log(`  ⚖️ Orders with weight: ${finalOrders.filter(o => o.weight !== undefined).length}`);
   
   // Show customers with multiple items
   for (const [customer, count] of customerCounts.entries()) {

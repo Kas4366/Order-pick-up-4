@@ -197,7 +197,7 @@ class ArchiveService {
             isMatch = true;
           } else if (order.buyerPostcode && order.buyerPostcode.replace(/\s/g, '').toUpperCase().includes(normalizedPostcode)) {
             isMatch = true;
-          } else if (order.additionalDetails && order.additionalDetails.toLowerCase().includes(normalizedSearchTerm)) {
+          } else if (order.itemName && order.itemName.toLowerCase().includes(normalizedSearchTerm)) {
             isMatch = true;
           }
           

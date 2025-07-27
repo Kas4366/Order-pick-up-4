@@ -102,7 +102,8 @@ export const parseHtmlContent = async (
         // Extract channel type and channel from appropriate columns (adjust column numbers as needed)
         let channelType = '';
         let channel = '';
-        let packagingType = '';
+        let width: number | undefined = undefined;
+        let weight: number | undefined = undefined;
         
         // Try to extract from additional columns if they exist
         const channelTypeCell = orderDetails.querySelector('td:nth-child(8)');
@@ -115,9 +116,26 @@ export const parseHtmlContent = async (
           channel = channelCell.textContent?.trim() || '';
         }
         
-        const packagingTypeCell = orderDetails.querySelector('td:nth-child(10)');
-        if (packagingTypeCell) {
-          packagingType = packagingTypeCell.textContent?.trim() || '';
+        // Try to extract width from column 10
+        const widthCell = orderDetails.querySelector('td:nth-child(10)');
+        if (widthCell) {
+          const widthText = widthCell.textContent?.trim() || '';
+          const parsedWidth = parseFloat(widthText);
+          if (!isNaN(parsedWidth)) {
+            width = parsedWidth;
+            console.log(`📏 Extracted width for ${sku}: ${width}cm`);
+          }
+        }
+        
+        // Try to extract weight from column 11
+        const weightCell = orderDetails.querySelector('td:nth-child(11)');
+        if (weightCell) {
+          const weightText = weightCell.textContent?.trim() || '';
+          const parsedWeight = parseFloat(weightText);
+          if (!isNaN(parsedWeight)) {
+            weight = parsedWeight;
+            console.log(`⚖️ Extracted weight for ${sku}: ${weight}g`);
+          }
         }
 
         // Extract remaining stock information from HTML - IMPROVED LOGIC
@@ -301,6 +319,39 @@ export const parseHtmlContent = async (
           console.log(`❌ No image element found for SKU ${sku}`);
         }
         
+        // Extract product name from the HTML table
+        let productName = '';
+        
+        // Try to find product name in various columns
+        const productNameCell = orderDetails.querySelector('td:nth-child(3)'); // Adjust column as needed
+        if (productNameCell) {
+          productName = productNameCell.textContent?.trim() || '';
+        }
+        
+        // If not found in column 3, try other common locations
+        if (!productName) {
+          // Try looking for a cell that contains product information
+          const allCells = orderDetails.querySelectorAll('td');
+          for (const cell of allCells) {
+            const cellText = cell.textContent?.trim() || '';
+            // Skip cells that are clearly not product names (numbers, short codes, etc.)
+            if (cellText && 
+                cellText !== sku && 
+                cellText !== quantityText && 
+                cellText !== customerName && 
+                cellText !== location &&
+                cellText.length > 5 && // Reasonable length for a product name
+                !cellText.match(/^\d+$/) && // Not just numbers
+                !cellText.match(/^[A-Z]{2,}\d+$/) // Not just codes like "ABC123"
+               ) {
+              productName = cellText;
+              break;
+            }
+          }
+        }
+        
+        console.log(`📝 Extracted product name for ${sku}: "${productName}"`);
+        
         // Store raw order data with original index for sorting
         rawOrders.push({
           orderNumber: orderNumber,
@@ -315,7 +366,9 @@ export const parseHtmlContent = async (
           fileDate: fileDate,
           channelType: channelType,
           channel: channel || '',
-          packagingType: packagingType || '',
+         width: width,
+         weight: weight,
+          itemName: productName,
           originalIndex: orderIndex, // Use order index for grouping
           itemIndex: itemIndex, // Track item position within order
         });
@@ -332,7 +385,8 @@ export const parseHtmlContent = async (
           fileDate,
           channelType,
           channel,
-          packagingType,
+          width,
+          weight,
           hasImage: !!imageUrl,
           itemIndex
         });
@@ -392,7 +446,9 @@ export const parseHtmlContent = async (
           fileDate: rawOrder.fileDate,
          channelType: rawOrder.channelType,
          channel: rawOrder.channel || '',
-         packagingType: rawOrder.packagingType || '',
+          width: rawOrder.width,
+          weight: rawOrder.weight,
+          itemName: rawOrder.itemName,
           completed: false,
         };
 

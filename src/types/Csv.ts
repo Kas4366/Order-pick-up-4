@@ -1,4 +1,4 @@
-export type CsvField = 'orderNumber' | 'customerFirstName' | 'customerLastName' | 'sku' | 'quantity' | 'location' | 'buyerPostcode' | 'imageUrl' | 'remainingStock' | 'orderValue' | 'channelType' | 'channel' | 'packagingType';
+export type CsvField = 'orderNumber' | 'customerFirstName' | 'customerLastName' | 'sku' | 'quantity' | 'location' | 'buyerPostcode' | 'imageUrl' | 'remainingStock' | 'orderValue' | 'channelType' | 'channel' | 'width' | 'weight' | 'itemName';
 
 export interface CsvColumnMapping {
   [key: string]: string; // Maps CsvField to the actual CSV column header
@@ -17,17 +17,13 @@ export const defaultCsvColumnMapping: CsvColumnMapping = {
   orderValue: 'Order Value',
   channelType: 'Channel Type',
   channel: 'Channel',
-  packagingType: 'Packaging Type',
+  width: 'Width',
+  weight: 'Weight',
+  itemName: 'Product Name',
 };
 
-// New interface for SKU-Image mapping
-export interface SkuImageMap {
-  [sku: string]: string; // Maps SKU to image URL
-}
-
-// Interface for SKU-Image CSV file info
-export interface SkuImageCsvInfo {
-  fileName: string;
-  uploadedAt: string;
-  skuCount: number;
+// Local images folder info
+export interface LocalImagesFolderInfo {
+  folderName: string;
+  selectedAt: string;
 }

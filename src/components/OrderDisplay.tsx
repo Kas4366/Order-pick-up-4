@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { MapPin, Box, Check, Volume2, VolumeX, Package, User, Hash, AlertTriangle, Clock, DollarSign, Calendar, Truck } from 'lucide-react';
+import { MapPin, Box, Check, Volume2, VolumeX, Package, User, Hash, AlertTriangle, Clock, DollarSign, Calendar, Truck, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Order } from '../types/Order';
 import { VoiceSettings } from '../types/VoiceSettings';
 import { StockTrackingItem } from '../types/StockTracking';
@@ -24,6 +24,8 @@ interface OrderDisplayProps {
   onMarkForReorder: (order: Order) => void;
   stockTrackingItems: StockTrackingItem[];
   onUnmarkForReorder: (sku: string, markedDate: string) => void;
+  autoCompleteEnabled?: boolean;
+  packagingType?: string | null;
 }
 
 export const OrderDisplay: React.FC<OrderDisplayProps> = ({ 
@@ -34,12 +36,15 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
   voiceSettings, 
   onMarkForReorder,
   stockTrackingItems,
-  onUnmarkForReorder
+  onUnmarkForReorder,
+  autoCompleteEnabled = false,
+  packagingType
 }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const [showNextSkuDetails, setShowNextSkuDetails] = useState(false);
   const speakTimeoutRef = useRef<number | null>(null);
   const checkboxRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -215,6 +220,8 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
   // FIXED CHECKBOX TOGGLE FUNCTION
   const handleCheckboxToggle = () => {
     console.log('🔘 Checkbox toggle triggered, current tracked item:', !!currentTrackedItem);
+    console.log('🔘 Order details:', { orderNumber: order.orderNumber, sku: order.sku, customerName: order.customerName });
+    console.log('🔘 Stock tracking items count:', stockTrackingItems.length);
     
     if (currentTrackedItem) {
       // Item is already tracked, so unmark it
@@ -226,6 +233,14 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
       onMarkForReorder(order);
     }
   };
+
+  // Auto-complete order when displayed if setting is enabled
+  useEffect(() => {
+    if (autoCompleteEnabled && order && !order.completed) {
+      console.log('🔄 Auto-completing order due to setting:', order.orderNumber);
+      markAsCompleted();
+    }
+  }, [order, autoCompleteEnabled]);
 
   const handleImageLoad = () => {
     setImageLoading(false);
@@ -312,63 +327,78 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
 
   return (
     <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
+      {/* Packaging Type Display - Top Right */}
+      {packagingType && (
+        <div className="bg-green-600 text-white p-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{getPackagingIcon(packagingType)}</span>
+            <div>
+              <h3 className="text-lg font-bold">Packaging Required</h3>
+              <p className="text-green-100 text-sm">Use this packaging type for shipping</p>
+            </div>
+          </div>
+          <div className="bg-white bg-opacity-20 rounded-lg px-4 py-2">
+            <p className="text-xl font-bold">{packagingType}</p>
+          </div>
+        </div>
+      )}
+
       {/* PROMINENT NEXT SKU NEEDS ALERT - TOP RED BOX */}
       {nextSkuNeeds && (
-        <div className="bg-red-600 border-b-4 border-red-700 p-4 text-white">
+        <button 
+          onClick={() => setShowNextSkuDetails(!showNextSkuDetails)}
+          className="w-full bg-red-600 border-b-2 border-red-700 p-3 text-white hover:bg-red-700 transition-colors"
+        >
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="bg-white bg-opacity-20 rounded-full p-2">
-                <Package className="h-6 w-6 text-white" />
-              </div>
+            <div className="flex items-center gap-3">
+              <Package className="h-5 w-5 text-white" />
               <div>
-                <h3 className="text-lg font-bold text-white mb-1">
-                  🚨 PICK EXTRA ITEMS FOR EFFICIENCY!
+                <h3 className="text-md font-bold text-white">
+                  🚨 PICK EXTRA: {order.sku}
                 </h3>
-                <p className="text-red-100 text-sm">
-                  This SKU ({order.sku}) is needed for upcoming orders
+                <p className="text-red-100 text-xs">
+                  Needed for {nextSkuNeeds.orderCount} upcoming orders
                 </p>
               </div>
             </div>
             
-            {/* LARGE TOTAL QUANTITY DISPLAY */}
-            <div className="bg-white bg-opacity-20 rounded-lg p-4 text-center min-w-[120px]">
-              <p className="text-red-100 text-xs font-medium mb-1">TOTAL TO PICK</p>
-              <p className="text-4xl font-black text-white">
-                {order.quantity + nextSkuNeeds.totalQuantity}
-              </p>
-              <p className="text-red-100 text-xs mt-1">
-                ({order.quantity} + {nextSkuNeeds.totalQuantity} more)
-              </p>
+            <div className="flex items-center gap-3">
+              <div className="bg-white bg-opacity-20 rounded-lg p-2 text-center">
+                <p className="text-red-100 text-xs font-medium">TOTAL</p>
+                <p className="text-2xl font-black text-white">
+                  {order.quantity + nextSkuNeeds.totalQuantity}
+                </p>
+              </div>
+              {showNextSkuDetails ? (
+                <ChevronUp className="h-5 w-5 text-white" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-white" />
+              )}
             </div>
           </div>
-          
-          {/* DETAILED BREAKDOWN */}
-          <div className="mt-4 bg-white bg-opacity-10 rounded-lg p-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-red-100 text-sm font-medium mb-2">
-                  📦 Current Order: {order.quantity} units
-                </p>
-                <p className="text-red-100 text-sm font-medium">
-                  📋 Future Orders: {nextSkuNeeds.totalQuantity} units across {nextSkuNeeds.orderCount} order{nextSkuNeeds.orderCount !== 1 ? 's' : ''}
-                </p>
+        </button>
+      )}
+      
+      {/* Expandable Next SKU Details */}
+      {nextSkuNeeds && showNextSkuDetails && (
+        <div className="bg-red-500 border-b-2 border-red-600 p-3 text-white">
+          <h4 className="text-sm font-bold text-white mb-2">Future Orders Requiring {order.sku}:</h4>
+          <div className="space-y-1">
+            {nextSkuNeeds.orders.map((futureOrder, index) => (
+              <div key={index} className="flex justify-between items-center bg-red-400 bg-opacity-50 rounded px-2 py-1">
+                <span className="text-sm">
+                  Order #{futureOrder.orderNumber} - {futureOrder.customerName}
+                </span>
+                <span className="text-sm font-bold">
+                  Qty: {futureOrder.quantity}
+                </span>
               </div>
-              
-              <div className="space-y-1">
-                <p className="text-red-100 text-xs font-medium mb-1">Upcoming orders:</p>
-                {nextSkuNeeds.orders.slice(0, 2).map((upcomingOrder, index) => (
-                  <div key={index} className="text-xs text-red-100 bg-white bg-opacity-10 rounded px-2 py-1">
-                    <span className="font-medium">#{upcomingOrder.orderNumber}</span> - {upcomingOrder.customerName} 
-                    <span className="text-red-200 ml-1">(Qty: {upcomingOrder.quantity})</span>
-                  </div>
-                ))}
-                {nextSkuNeeds.orders.length > 2 && (
-                  <div className="text-xs text-red-200 text-center">
-                    +{nextSkuNeeds.orders.length - 2} more orders
-                  </div>
-                )}
-              </div>
-            </div>
+            ))}
+          </div>
+          <div className="mt-2 pt-2 border-t border-red-400 text-center">
+            <p className="text-sm font-bold">
+              Total Extra Needed: {nextSkuNeeds.totalQuantity} (+ Current: {order.quantity} = {order.quantity + nextSkuNeeds.totalQuantity})
+            </p>
           </div>
         </div>
       )}
@@ -429,10 +459,27 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
             </div>
             
             {order.buyerPostcode && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <MapPin className="h-4 w-4 text-blue-600" />
                 <span className="text-sm text-blue-600 font-medium">
                   Postcode: {order.buyerPostcode}
+                </span>
+                {order.itemName && (
+                  <>
+                    <span className="text-gray-400">•</span>
+                    <span className="text-sm text-gray-700 font-medium">
+                      {order.itemName}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+            
+            {!order.buyerPostcode && order.itemName && (
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-gray-600" />
+                <span className="text-sm text-gray-700 font-medium">
+                  {order.itemName}
                 </span>
               </div>
             )}
@@ -507,7 +554,7 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                         <div className="flex flex-col items-center justify-center text-gray-400 p-4">
                           <Box className="h-16 w-16 mb-2" />
                           <p className="text-sm text-center">
-                            {imageError ? 'Image not found' : 'No image available'}
+                            {imageError ? 'Image not found in folder' : 'No image available'}
                           </p>
                           <p className="text-xs text-gray-500 mt-1 text-center">
                             SKU: {item.sku}
@@ -579,24 +626,24 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                       )}
 
                       {/* Packaging Type for grouped items */}
-                      {item.packagingType && (
+                      {packagingType && (
                         <div className="mt-4">
                           <h5 className="text-xs font-medium text-blue-700 mb-1">Packaging Required</h5>
                           <div className="bg-green-100 rounded p-2">
                             <div className="flex items-center gap-2">
-                              <span className="text-lg">{getPackagingIcon(item.packagingType)}</span>
+                              <span className="text-lg">{getPackagingIcon(packagingType)}</span>
                               <div>
-                                <p className="text-sm font-medium text-green-900">{item.packagingType}</p>
+                                <p className="text-sm font-medium text-green-900">{packagingType}</p>
                               </div>
                             </div>
                           </div>
                         </div>
                       )}
 
-                      {item.additionalDetails && (
+                      {item.itemName && (
                         <div className="mt-4">
                           <h5 className="text-xs font-medium text-blue-700 mb-1">Product Details</h5>
-                          <p className="text-sm text-blue-900">{item.additionalDetails}</p>
+                          <p className="text-sm text-blue-900">{item.itemName}</p>
                         </div>
                       )}
                     </div>
@@ -607,9 +654,9 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
           </div>
         ) : (
           /* Single item display - IMPROVED LAYOUT */
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Image Section - Takes up more space */}
-            <div className="lg:col-span-3">
+            <div className="lg:col-span-2">
               <div className="w-full bg-gray-100 rounded-lg overflow-hidden relative flex items-center justify-center" style={{ height: '500px' }}>
                 {order.imageUrl && !imageError ? (
                   <>
@@ -633,11 +680,16 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                   <div className="flex flex-col items-center justify-center text-gray-400 p-8">
                     <Box className="h-20 w-20 mb-2" />
                     <p className="text-sm text-center px-4">
-                      {imageError ? 'Image not found' : 'No image available'}
+                      {imageError ? 'Image not found in folder' : 'No image available'}
                     </p>
                     {imageError && order.imageUrl && (
                       <p className="text-xs text-gray-500 mt-1 px-4 text-center">
                         SKU: {order.sku}
+                      </p>
+                    )}
+                    {imageError && (
+                      <p className="text-xs text-gray-500 mt-2 px-4 text-center">
+                        Image not found in folder
                       </p>
                     )}
                   </div>
@@ -646,7 +698,7 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
             </div>
             
             {/* Details Section - Compact but complete */}
-            <div className="lg:col-span-2 space-y-4">
+            <div className="lg:col-span-1 space-y-4">
               <div className="bg-blue-50 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Package className="h-5 w-5 text-blue-600" />
@@ -746,31 +798,33 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
 
               {/* Mark for Reorder - COMPLETELY FIXED CHECKBOX */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <label className="flex items-center gap-3 cursor-pointer" onClick={(e) => e.preventDefault()}>
+                <div className="flex items-center gap-3">
                   <input
                     ref={checkboxRef}
                     type="checkbox"
                     checked={!!currentTrackedItem}
                     onChange={handleCheckboxToggle}
-                    onClick={(e) => e.stopPropagation()}
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
                   />
-                  <span 
-                    className="text-sm font-medium text-gray-800 cursor-pointer"
-                    onClick={handleCheckboxToggle}
-                  >
+                  <label className="text-sm font-medium text-gray-800 cursor-pointer" onClick={handleCheckboxToggle}>
                     {currentTrackedItem ? 'Marked for reorder ✓' : 'Mark for reorder'}
-                  </span>
-                </label>
+                  </label>
+                </div>
                 <p className="text-xs text-gray-600 mt-2">
                   Mark this item to track it for reordering later (Press SPACEBAR as shortcut)
                 </p>
+                {currentTrackedItem && (
+                  <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
+                    <CheckCircle className="h-3 w-3" />
+                    <span>Added to reorder list</span>
+                  </div>
+                )}
               </div>
               
-              {order.additionalDetails && (
+              {order.itemName && (
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Additional Details</h4>
-                  <p className="text-gray-800 text-sm">{order.additionalDetails}</p>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Item Name</h4>
+                  <p className="text-gray-800 text-sm">{order.itemName}</p>
                 </div>
               )}
             </div>

@@ -5,7 +5,7 @@ export interface Order {
   quantity: number;
   location: string;
   imageUrl?: string;
-  additionalDetails?: string;
+  itemName?: string;
   completed?: boolean;
   // Selro-specific fields for API integration
   selroOrderId?: string;
@@ -25,5 +25,4 @@ export interface Order {
   channelType?: string;
   channel?: string;
   // Packaging information
-  packagingType?: string;
 }

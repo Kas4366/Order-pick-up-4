@@ -5,12 +5,16 @@ interface CustomerSearchProps {
   onCustomerSearch: (customerName: string) => void;
   onQRCodeScan?: (qrData: string) => void;
   onArrowNavigation?: (direction: 'up' | 'down') => void;
+  searchMessage?: string;
+  onClearMessage?: () => void;
 }
 
 export const CustomerSearch: React.FC<CustomerSearchProps> = ({ 
   onCustomerSearch, 
   onQRCodeScan,
-  onArrowNavigation 
+  onArrowNavigation,
+  searchMessage,
+  onClearMessage
 }) => {
   const [searchInput, setSearchInput] = useState('');
   const [searchMode, setSearchMode] = useState<'manual' | 'scanner' | 'arrows'>('manual');
@@ -113,6 +117,11 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchInput(value);
+    
+    // Clear search message when user starts typing
+    if (onClearMessage && searchMessage) {
+      onClearMessage();
+    }
     
     // Auto-detect QR code data and process immediately in scanner mode
     if (searchMode === 'scanner' && value.length > 20 && (value.includes('\n') || value.includes('JGB') || value.includes('GB'))) {
@@ -223,6 +232,13 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
           )}
         </div>
       </form>
+      
+      {/* Search Message */}
+      {searchMessage && (
+        <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
+          <p className="text-sm text-orange-800">{searchMessage}</p>
+        </div>
+      )}
       
       {/* Simplified mode instructions */}
       <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded-lg">
