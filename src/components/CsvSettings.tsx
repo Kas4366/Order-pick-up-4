@@ -311,6 +311,15 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
           <p className="text-xs text-green-700 mt-2">
             The app will try various filename combinations including exact SKU match, with/without special characters, and different cases.
           </p>
+          
+          {/* Persistence Info */}
+          <div className="mt-3 pt-2 border-t border-green-200">
+            <p className="text-xs font-medium text-green-800 mb-1">Smart Folder Access:</p>
+            <p className="text-xs text-green-700">
+              The app remembers your images folder and automatically restores access when possible. 
+              Due to browser security, you may occasionally need to re-grant permission with a single click.
+            </p>
+          </div>
         </div>
       </div>
 

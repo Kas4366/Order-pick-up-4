@@ -1,4 +1,5 @@
 import { Order } from '../types/Order';
+import { findImageFile } from './imageUtils';
 
 export const parseHtmlContent = async (
   file: File, 
@@ -302,10 +303,14 @@ export const parseHtmlContent = async (
               console.log(`🔍 Looking for image file: "${filename}" in folder: "${imagesFolderHandle.name}"`);
               
               // Try to find the image file
-              imageUrl = await findImageFile(imagesFolderHandle, filename, sku);
+              imageUrl = await findImageFileForHtml(imagesFolderHandle, filename, sku);
               
               if (imageUrl) {
                 console.log(`✅ Successfully loaded image for SKU ${sku}`);
+                
+                // Mark this order as having a local image
+                item._isLocalImage = true;
+                item._originalSkuForLocalImage = sku;
               } else {
                 console.log(`❌ Failed to load image for SKU ${sku}`);
               }
@@ -450,6 +455,10 @@ export const parseHtmlContent = async (
           weight: rawOrder.weight,
           itemName: rawOrder.itemName,
           completed: false,
+          _sourceFileName: rawOrder._sourceFileName,
+          _isLocalImage: rawOrder._isLocalImage,
+          _originalSkuForLocalImage: rawOrder._originalSkuForLocalImage,
+          _sourceFileName: file.name,
         };
 
         finalOrders.push(order);
@@ -505,8 +514,8 @@ export const parseHtmlContent = async (
   }
 };
 
-// Helper function to find and load image files
-async function findImageFile(
+// Helper function to find and load image files for HTML parsing
+async function findImageFileForHtml(
   imagesFolderHandle: FileSystemDirectoryHandle, 
   originalFilename: string, 
   sku: string

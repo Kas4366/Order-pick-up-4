@@ -25,4 +25,8 @@ export interface Order {
   channelType?: string;
   channel?: string;
   // Packaging information
+  // Local image metadata
+  _isLocalImage?: boolean;
+  _originalSkuForLocalImage?: string;
+  _sourceFileName?: string;
 }

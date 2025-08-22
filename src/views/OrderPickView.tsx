@@ -58,6 +58,7 @@ export const OrderPickView: React.FC = () => {
     // CSV Images Folder
     csvImagesFolderInfo,
     setCsvImagesFolder,
+    csvImagesFolderHandle,
     // Archive
     handleLoadArchivedOrder,
     isArchiveInitialized,
@@ -67,6 +68,8 @@ export const OrderPickView: React.FC = () => {
     customPackagingTypes,
     saveCustomPackagingTypes,
     currentOrderPackagingType,
+    // Stock tracking update
+    updateStockTrackingItem,
   } = useOrderData();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -281,6 +284,9 @@ export const OrderPickView: React.FC = () => {
         stockTrackingItems={stockTrackingItems}
         onRemoveStockItem={removeStockTrackingItem}
         onClearAllStockItems={clearAllStockTrackingItems}
+        onUpdateStockItem={updateStockTrackingItem}
+        onUpdateStockItem={updateStockTrackingItem}
+        csvImagesFolderHandle={csvImagesFolderHandle}
         customTags={customTags}
         onSaveCustomTags={saveCustomTags}
         selectedSelroTag={selectedSelroTag}
@@ -289,6 +295,7 @@ export const OrderPickView: React.FC = () => {
         onSelectVeeqoTag={handleSelectVeeqoTag}
         csvImagesFolderInfo={csvImagesFolderInfo}
         onSetCsvImagesFolder={setCsvImagesFolder}
+        csvImagesFolderHandle={csvImagesFolderHandle}
         onLoadArchivedOrder={handleLoadArchivedOrder}
         packagingRules={packagingRules}
         onSavePackagingRules={savePackagingRules}

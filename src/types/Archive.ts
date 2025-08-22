@@ -23,6 +23,10 @@ export interface ArchivedOrder {
   selroItemId?: string;
   veeqoOrderId?: string;
   veeqoItemId?: string;
+  localImageSource?: {
+    sku: string;
+    folderName: string;
+  };
 }
 
 export interface ArchiveStats {

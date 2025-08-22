@@ -1,20 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Calendar, MapPin, Trash2, Download, AlertTriangle } from 'lucide-react';
+import { Package, Calendar, MapPin, Trash2, Download, AlertTriangle, Image, Weight, Navigation } from 'lucide-react';
 import { StockTrackingItem } from '../types/StockTracking';
+import { findImageFile } from '../utils/imageUtils';
+import { fileHandlePersistenceService } from '../services/fileHandlePersistenceService';
 
 interface StockTrackingTabProps {
   trackedItems: StockTrackingItem[];
   onRemoveItem: (sku: string, markedDate: string) => void;
   onClearAll: () => void;
+  onUpdateItem: (sku: string, markedDate: string, updates: Partial<StockTrackingItem>) => void;
 }
 
 export const StockTrackingTab: React.FC<StockTrackingTabProps> = ({
   trackedItems,
   onRemoveItem,
   onClearAll,
+  onUpdateItem,
 }) => {
   const [sortBy, setSortBy] = useState<'date' | 'sku' | 'stock'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [loadingImages, setLoadingImages] = useState<Set<string>>(new Set());
 
   const sortedItems = [...trackedItems].sort((a, b) => {
     let comparison = 0;
@@ -34,10 +39,71 @@ export const StockTrackingTab: React.FC<StockTrackingTabProps> = ({
     return sortOrder === 'asc' ? comparison : -comparison;
   });
 
+  // Load images for items that have local image sources but no current imageUrl
+  useEffect(() => {
+    const loadMissingImages = async () => {
+      for (const item of trackedItems) {
+        if (item.localImageSource && !item.imageUrl) {
+          const itemKey = `${item.sku}-${item.markedDate}`;
+          
+          if (loadingImages.has(itemKey)) continue; // Already loading
+          
+          setLoadingImages(prev => new Set(prev).add(itemKey));
+          
+          try {
+            console.log(`🖼️ Attempting to load image for stock item: ${item.sku}`);
+            
+            // Try to get the saved folder handle
+            const savedHandle = await fileHandlePersistenceService.getHandle('csvImagesFolder');
+            
+            if (savedHandle && savedHandle.name === item.localImageSource.folderName) {
+              // Validate and request permission
+              const hasPermission = await fileHandlePersistenceService.validateAndRequestPermission(savedHandle);
+              
+              if (hasPermission) {
+                // Try to find the image using the original SKU
+                const imageUrl = await findImageFile(savedHandle, item.localImageSource.sku);
+                
+                if (imageUrl) {
+                  // Update the item with the restored image URL
+                  onUpdateItem(item.sku, item.markedDate, { imageUrl });
+                  console.log(`✅ Successfully loaded image for stock item: ${item.sku}`);
+                } else {
+                  console.log(`⚠️ Could not find image file for stock item: ${item.sku}`);
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`❌ Error loading image for stock item ${item.sku}:`, error);
+          } finally {
+            setLoadingImages(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(itemKey);
+              return newSet;
+            });
+          }
+        }
+      }
+    };
+    
+    loadMissingImages();
+  }, [trackedItems, onUpdateItem]);
+
+  const handleWeightChange = (item: StockTrackingItem, weight: string) => {
+    const weightValue = weight === '' ? undefined : parseFloat(weight);
+    if (weight !== '' && (isNaN(weightValue!) || weightValue! < 0)) return; // Invalid input
+    
+    onUpdateItem(item.sku, item.markedDate, { weight: weightValue });
+  };
+
+  const handleLocationChange = (item: StockTrackingItem, newLocation: string) => {
+    onUpdateItem(item.sku, item.markedDate, { newLocation: newLocation.trim() });
+  };
+
   const exportToCSV = () => {
     if (trackedItems.length === 0) return;
     
-    const headers = ['SKU', 'Marked Date', 'Order Number', 'Customer', 'Current Stock', 'Location'];
+    const headers = ['SKU', 'Marked Date', 'Order Number', 'Customer', 'Current Stock', 'Original Location', 'Image URL', 'Weight (g)', 'New Location'];
     const csvContent = [
       headers.join(','),
       ...trackedItems.map(item => [
@@ -46,7 +112,10 @@ export const StockTrackingTab: React.FC<StockTrackingTabProps> = ({
         item.orderNumber,
         `"${item.customerName}"`,
         item.currentStock,
-        item.location
+        item.location,
+        `"${item.imageUrl || ''}"`,
+        item.weight || '',
+        `"${item.newLocation || ''}"`
       ].join(','))
     ].join('\n');
     
@@ -191,13 +260,22 @@ export const StockTrackingTab: React.FC<StockTrackingTabProps> = ({
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Image
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       SKU
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Stock Level
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Location
+                      Original Location
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Weight (g)
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      New Location
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Marked Date
@@ -214,6 +292,25 @@ export const StockTrackingTab: React.FC<StockTrackingTabProps> = ({
                   {sortedItems.map((item, index) => (
                     <tr key={`${item.sku}-${item.markedDate}`} className="hover:bg-gray-50">
                       <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+                          {item.imageUrl ? (
+                            <img 
+                              src={item.imageUrl} 
+                              alt={`Product ${item.sku}`}
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                console.log(`❌ Image failed to load for ${item.sku}`);
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          ) : loadingImages.has(`${item.sku}-${item.markedDate}`) ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                          ) : (
+                            <Image className="h-6 w-6 text-gray-400" />
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <Package className="h-4 w-4 text-gray-400 mr-2" />
                           <span className="text-sm font-medium text-gray-900">{item.sku}</span>
@@ -228,6 +325,32 @@ export const StockTrackingTab: React.FC<StockTrackingTabProps> = ({
                         <div className="flex items-center">
                           <MapPin className="h-4 w-4 text-gray-400 mr-2" />
                           <span className="text-sm text-gray-900">{item.location}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <Weight className="h-4 w-4 text-gray-400 mr-2" />
+                          <input
+                            type="number"
+                            value={item.weight || ''}
+                            onChange={(e) => handleWeightChange(item, e.target.value)}
+                            placeholder="Enter weight"
+                            min="0"
+                            step="0.1"
+                            className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <Navigation className="h-4 w-4 text-gray-400 mr-2" />
+                          <input
+                            type="text"
+                            value={item.newLocation || ''}
+                            onChange={(e) => handleLocationChange(item, e.target.value)}
+                            placeholder="Enter new location"
+                            className="w-32 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
                         </div>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
@@ -259,6 +382,20 @@ export const StockTrackingTab: React.FC<StockTrackingTabProps> = ({
           </div>
         </>
       )}
+
+      {/* Enhanced Features Notice */}
+      <div className="bg-blue-50 rounded-lg p-4">
+        <h4 className="text-sm font-medium text-blue-800 mb-2">Enhanced Features:</h4>
+        <div className="text-sm text-blue-700 space-y-1">
+          <p>✅ <strong>Item Images:</strong> Product images are automatically loaded from your local images folder</p>
+          <p>✅ <strong>Editable Weight:</strong> Enter item weight in grams for inventory management</p>
+          <p>✅ <strong>New Location:</strong> Update bin locations when items are moved or reorganized</p>
+          <p>✅ <strong>Auto-Save:</strong> All changes are saved automatically as you type</p>
+          <p>✅ <strong>CSV Export:</strong> Download includes all data including images, weights, and new locations</p>
+          <p>✅ <strong>Image Restoration:</strong> Images from archived orders are automatically restored when possible</p>
+          <p>✅ <strong>Image Restoration:</strong> Images from archived orders are automatically restored when possible</p>
+        </div>
+      </div>
     </div>
   );
 };

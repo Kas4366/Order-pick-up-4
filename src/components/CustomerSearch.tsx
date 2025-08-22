@@ -39,17 +39,28 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
         }
       }
       
-      // If the delay between keystrokes is > 100ms, assume it's manual typing
-      if (currentTime - lastKeyTime > 100) {
-        buffer = '';
-      }
-      
-      // Ignore if the input is focused (manual typing) or not in scanner mode
-      if (document.activeElement?.tagName === 'INPUT' || 
-          document.activeElement?.tagName === 'TEXTAREA' ||
-          searchMode !== 'scanner') {
-        return;
-      }
+     // Only process scanner input when in scanner mode
+     if (searchMode !== 'scanner') {
+       return;
+     }
+     
+     // If the delay between keystrokes is > 100ms, assume it's manual typing or new scan
+     if (currentTime - lastKeyTime > 100) {
+       buffer = '';
+     }
+     
+     // Ignore if user is actively typing in an input field (but allow scanner input everywhere else)
+     if (document.activeElement?.tagName === 'INPUT' || 
+         document.activeElement?.tagName === 'TEXTAREA') {
+       // Only ignore if the user is actually typing (not just clicked on an input)
+       // We can detect this by checking if the input has focus AND the keystroke timing suggests manual typing
+       if (currentTime - lastKeyTime <= 100) {
+         // Fast keystrokes suggest scanner input, process even if input is focused
+       } else {
+         // Slow keystrokes suggest manual typing, ignore
+         return;
+       }
+     }
 
       if (e.key === 'Enter') {
         if (buffer) {
@@ -76,7 +87,10 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
           buffer = '';
         }
       } else {
-        buffer += e.key;
+       // Only add printable characters to buffer (ignore modifier keys, function keys, etc.)
+       if (e.key.length === 1) {
+         buffer += e.key;
+       }
       }
       
       lastKeyTime = currentTime;
@@ -247,7 +261,11 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
         )}
         
         {searchMode === 'scanner' && (
-          <p>Scan shipping labels to extract buyer postcodes automatically</p>
+         <div>
+           <p className="font-medium text-green-700 mb-1">🔍 Scanner Mode Active</p>
+           <p>Scan shipping labels to extract buyer postcodes automatically</p>
+           <p className="text-green-600 mt-1">✓ Global scanning enabled - QR codes will be detected anywhere on screen</p>
+         </div>
         )}
         
         {searchMode === 'arrows' && (
