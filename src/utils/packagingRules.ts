@@ -27,6 +27,12 @@ function evaluateCondition(order: Order, condition: RuleCondition): boolean {
     case 'orderValue':
       orderValue = order.orderValue;
       break;
+    case 'channel':
+      orderValue = order.channel;
+      break;
+    case 'shipFromLocation':
+      orderValue = order.shipFromLocation;
+      break;
     default:
       return false;
   }
@@ -96,33 +102,34 @@ function evaluateRule(order: Order, rule: PackagingRule): boolean {
  * Evaluates packaging rules for an order and returns the packaging type
  * Rules are evaluated in priority order (lower number = higher priority)
  */
-export function evaluatePackagingRules(order: Order, rules: PackagingRule[]): string | null {
+export function evaluatePackagingRules(order: Order, rules: PackagingRule[], ruleType?: 'packaging' | 'box'): string | null {
   console.log('🔍 Evaluating packaging rules for order:', order.orderNumber, 'SKU:', order.sku);
   
   if (!rules || rules.length === 0) {
-    console.log('⚠️ No packaging rules defined');
+    console.log('⚠️ No rules defined for evaluation');
     return null;
   }
   
   // Sort rules by priority (lower number = higher priority)
+  // Filter by ruleType if specified
   const sortedRules = [...rules]
     .filter(rule => rule.enabled)
+    .filter(rule => !ruleType || rule.ruleType === ruleType)
     .sort((a, b) => a.priority - b.priority);
   
-  console.log(`🔍 Evaluating ${sortedRules.length} enabled rules`);
+  console.log(`🔍 Evaluating ${sortedRules.length} enabled ${ruleType || 'all'} rules`);
   
   for (const rule of sortedRules) {
     console.log(`🔍 Checking rule: "${rule.name}" (priority: ${rule.priority})`);
-    
     if (evaluateRule(order, rule)) {
-      console.log(`✅ Rule "${rule.name}" matched! Packaging type: ${rule.packagingType}`);
-      return rule.packagingType;
+      console.log(`✅ Rule "${rule.name}" matched! Result value: ${rule.resultValue}`);
+      return rule.resultValue;
     } else {
       console.log(`❌ Rule "${rule.name}" did not match`);
     }
   }
   
-  console.log('⚠️ No packaging rules matched for this order');
+  console.log(`⚠️ No ${ruleType || 'packaging'} rules matched for this order`);
   return null;
 }
 

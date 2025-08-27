@@ -25,6 +25,7 @@ export interface Order {
   channelType?: string;
   channel?: string;
   // Packaging information
+  shipFromLocation?: string;
   // Local image metadata
   _isLocalImage?: boolean;
   _originalSkuForLocalImage?: string;

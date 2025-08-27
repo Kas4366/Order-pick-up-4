@@ -72,7 +72,12 @@ export const OrderPickView: React.FC = () => {
     savePackagingRules,
     customPackagingTypes,
     saveCustomPackagingTypes,
+    boxRules,
+    saveBoxRules,
+    customBoxNames,
+    saveCustomBoxNames,
     currentOrderPackagingType,
+    currentOrderBoxName,
   } = useOrderData();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -255,6 +260,7 @@ export const OrderPickView: React.FC = () => {
                 onUnmarkForReorder={removeStockTrackingItem}
                 autoCompleteEnabled={autoCompleteEnabled}
                 packagingType={currentOrderPackagingType}
+               currentOrderBoxName={currentOrderBoxName}
                 onPreviewImageBySku={handlePreviewImageBySku}
               />
             ) : (
@@ -304,6 +310,10 @@ export const OrderPickView: React.FC = () => {
         onSavePackagingRules={savePackagingRules}
         customPackagingTypes={customPackagingTypes}
         onSaveCustomPackagingTypes={saveCustomPackagingTypes}
+        boxRules={boxRules}
+        onSaveBoxRules={saveBoxRules}
+        customBoxNames={customBoxNames}
+        onSaveBoxNames={saveCustomBoxNames}
         // Other settings
         autoCompleteEnabled={autoCompleteEnabled}
         onSaveOtherSettings={saveOtherSettings}

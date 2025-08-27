@@ -1,4 +1,5 @@
 export type CsvField = 'orderNumber' | 'customerFirstName' | 'customerLastName' | 'sku' | 'quantity' | 'location' | 'buyerPostcode' | 'imageUrl' | 'remainingStock' | 'orderValue' | 'channelType' | 'channel' | 'width' | 'weight' | 'itemName';
+export type CsvField = 'orderNumber' | 'customerFirstName' | 'customerLastName' | 'sku' | 'quantity' | 'location' | 'buyerPostcode' | 'imageUrl' | 'remainingStock' | 'orderValue' | 'channelType' | 'channel' | 'width' | 'weight' | 'itemName' | 'shipFromLocation';
 
 export interface CsvColumnMapping {
   [key: string]: string; // Maps CsvField to the actual CSV column header
@@ -20,6 +21,7 @@ export const defaultCsvColumnMapping: CsvColumnMapping = {
   width: 'Width',
   weight: 'Weight',
   itemName: 'Product Name',
+  shipFromLocation: 'Ship From Location',
 };
 
 // Local images folder info

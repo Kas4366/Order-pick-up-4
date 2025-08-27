@@ -161,6 +161,7 @@ export const parseCsvFile = async (
     const widthStr = extractValue('width');
     const weightStr = extractValue('weight');
     const itemName = extractValue('itemName');
+    const shipFromLocation = extractValue('shipFromLocation');
 
     console.log(`🔍 Row ${rowNumber} extracted values:`, {
       orderNumber,
@@ -291,6 +292,7 @@ export const parseCsvFile = async (
       width: width,
       weight: weight,
       itemName: itemName,
+      shipFromLocation: shipFromLocation,
       originalIndex: i, // Store original CSV row index
     });
 
@@ -370,6 +372,7 @@ export const parseCsvFile = async (
         width: rawOrder.width,
         weight: rawOrder.weight,
         itemName: rawOrder.itemName,
+        shipFromLocation: rawOrder.shipFromLocation,
         completed: false,
         _sourceFileName: file.name,
       };

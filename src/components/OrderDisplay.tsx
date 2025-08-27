@@ -26,6 +26,7 @@ interface OrderDisplayProps {
   onUnmarkForReorder: (sku: string, markedDate: string) => void;
   autoCompleteEnabled?: boolean;
   packagingType?: string | null;
+  currentOrderBoxName?: string | null;
   onPreviewImageBySku?: (sku: string) => void;
 }
 
@@ -40,6 +41,7 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
   onUnmarkForReorder,
   autoCompleteEnabled = false,
   packagingType,
+  currentOrderBoxName,
   onPreviewImageBySku
 }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -327,21 +329,58 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
     }
   };
 
+  // Get box icon based on box name
+  const getBoxIcon = (boxName: string) => {
+    const name = boxName.toLowerCase();
+    if (name.includes('small') || name.includes('mini')) {
+      return '📦'; // Small box
+    } else if (name.includes('medium') || name.includes('standard')) {
+      return '📫'; // Medium box
+    } else if (name.includes('large') || name.includes('big')) {
+      return '📪'; // Large box
+    } else if (name.includes('envelope') || name.includes('flat')) {
+      return '✉️'; // Envelope
+    } else if (name.includes('tube') || name.includes('cylinder')) {
+      return '🗞️'; // Tube
+    } else {
+      return '📦'; // Default box
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
-      {/* Packaging Type Display - Top Right */}
-      {packagingType && (
-        <div className="bg-green-600 text-white p-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">{getPackagingIcon(packagingType)}</span>
-            <div>
-              <h3 className="text-lg font-bold">Packaging Required</h3>
-              <p className="text-green-100 text-sm">Use this packaging type for shipping</p>
+      {/* Top display for packaging and box types */}
+      {(packagingType || currentOrderBoxName) && (
+        <div className={`grid ${packagingType && currentOrderBoxName ? 'grid-cols-2' : 'grid-cols-1'} gap-0`}>
+          {packagingType && (
+            <div className="bg-green-600 text-white p-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{getPackagingIcon(packagingType)}</span>
+                <div>
+                  <h3 className="text-lg font-bold">Packaging Type</h3>
+                  <p className="text-green-100 text-sm">Use this material</p>
+                </div>
+              </div>
+              <div className="bg-white bg-opacity-20 rounded-lg px-4 py-2">
+                <p className="text-xl font-bold">{packagingType}</p>
+              </div>
             </div>
-          </div>
-          <div className="bg-white bg-opacity-20 rounded-lg px-4 py-2">
-            <p className="text-xl font-bold">{packagingType}</p>
-          </div>
+          )}
+
+          {currentOrderBoxName && (
+            <div className={`bg-blue-600 text-white p-3 flex items-center justify-between ${packagingType ? 'border-l border-blue-500' : ''}`}>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{getBoxIcon(currentOrderBoxName)}</span>
+                <div>
+                  <h3 className="text-lg font-bold">Shipping Box</h3>
+                  <p className="text-blue-100 text-sm">Place in this box</p>
+                </div>
+              </div>
+              <div className="bg-white bg-opacity-20 rounded-lg px-4 py-2">
+                <p className="text-xl font-bold">{currentOrderBoxName}</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -638,21 +677,6 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                         </div>
                       )}
 
-                      {/* Packaging Type for grouped items */}
-                      {packagingType && (
-                        <div className="mt-4">
-                          <h5 className="text-xs font-medium text-blue-700 mb-1">Packaging Required</h5>
-                          <div className="bg-green-100 rounded p-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg">{getPackagingIcon(packagingType)}</span>
-                              <div>
-                                <p className="text-sm font-medium text-green-900">{packagingType}</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
                       {item.itemName && (
                         <div className="mt-4">
                           <h5 className="text-xs font-medium text-blue-700 mb-1">Product Details</h5>
@@ -786,24 +810,6 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                   {order.location}
                 </div>
               </div>
-
-              {/* Packaging Information */}
-              {order.packagingType && (
-                <div className="bg-orange-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Truck className="h-5 w-5 text-orange-600" />
-                    <h4 className="text-sm font-medium text-orange-800">Packaging Required</h4>
-                  </div>
-                  
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{getPackagingIcon(order.packagingType)}</span>
-                    <div>
-                      <p className="text-lg font-bold text-orange-900">{order.packagingType}</p>
-                      <p className="text-xs text-orange-700">Use this packaging type for shipping</p>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Low Stock Warning - Only shown when stock is low */}
               {showLowStockWarning && (

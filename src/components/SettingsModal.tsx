@@ -58,6 +58,11 @@ interface SettingsModalProps {
   // Other settings props
   autoCompleteEnabled?: boolean;
   onSaveOtherSettings?: (settings: { autoCompleteEnabled: boolean }) => void;
+  // Box rules props
+  boxRules?: PackagingRule[];
+  onSaveBoxRules?: (rules: PackagingRule[]) => void;
+  customBoxNames?: string[];
+  onSaveBoxNames?: (names: string[]) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -96,6 +101,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSaveCustomPackagingTypes = () => {},
   autoCompleteEnabled = false,
   onSaveOtherSettings,
+  boxRules = [],
+  onSaveBoxRules = () => {},
+  customBoxNames = [],
+  onSaveBoxNames = () => {},
 }) => {
   const [activeTab, setActiveTab] = useState<'archive' | 'tags' | 'packaging' | 'selro' | 'veeqo' | 'files' | 'csv' | 'voice' | 'stock' | 'other'>('archive');
 
@@ -282,6 +291,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               onSaveRules={onSavePackagingRules}
               customPackagingTypes={customPackagingTypes}
               onSavePackagingTypes={onSaveCustomPackagingTypes}
+              boxRules={boxRules}
+              onSaveBoxRules={onSaveBoxRules}
+              customBoxNames={customBoxNames}
+              onSaveBoxNames={onSaveBoxNames}
             />
           )}
 

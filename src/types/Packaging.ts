@@ -1,6 +1,6 @@
 export type RuleOperator = 'contains' | 'equals' | 'greater_than' | 'less_than' | 'greater_equal' | 'less_equal' | 'starts_with' | 'ends_with';
 
-export type RuleField = 'sku' | 'quantity' | 'width' | 'weight' | 'location' | 'orderValue';
+export type RuleField = 'sku' | 'quantity' | 'width' | 'weight' | 'location' | 'orderValue' | 'channel' | 'shipFromLocation';
 
 export interface RuleCondition {
   id: string;
@@ -14,7 +14,8 @@ export interface PackagingRule {
   name: string;
   description?: string;
   conditions: RuleCondition[];
-  packagingType: string;
+  ruleType: 'packaging' | 'box';
+  resultValue: string;
   priority: number;
   enabled: boolean;
   createdAt: string;
@@ -23,6 +24,7 @@ export interface PackagingRule {
 
 export interface PackagingRulesState {
   rules: PackagingRule[];
+  boxRules: PackagingRule[];
 }
 
 export const defaultPackagingRules: PackagingRule[] = [
@@ -38,7 +40,8 @@ export const defaultPackagingRules: PackagingRule[] = [
         value: 1
       }
     ],
-    packagingType: 'Letter',
+    ruleType: 'packaging',
+    resultValue: 'Letter',
     priority: 100,
     enabled: true,
     createdAt: new Date().toISOString(),
@@ -52,7 +55,9 @@ export const fieldLabels: Record<RuleField, string> = {
   width: 'Width (cm)',
   weight: 'Weight (g)',
   location: 'Location',
-  orderValue: 'Order Value'
+  orderValue: 'Order Value',
+  channel: 'Channel',
+  shipFromLocation: 'Ship From Location'
 };
 
 export const operatorLabels: Record<RuleOperator, string> = {
@@ -78,3 +83,63 @@ export const defaultPackagingTypes = [
   'Bubble Wrap',
   'Custom'
 ];
+
+export const defaultBoxNames = [
+  'SM OBA',
+  'CC OBA', 
+  'Click & Drop',
+  'Local Pickup',
+  'Express Box',
+  'Standard Box'
+];
+
+export const defaultBoxRules: PackagingRule[] = [
+  {
+    id: 'default-sm-oba',
+    name: 'SM OBA Box',
+    description: 'Orders going to SM OBA location',
+    conditions: [
+      {
+        id: 'cond-sm-1',
+        field: 'shipFromLocation',
+        operator: 'contains',
+        value: 'SM'
+      }
+    ],
+    ruleType: 'box',
+    resultValue: 'SM OBA',
+    priority: 50,
+    enabled: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
+
+export function validateRule(rule: Partial<PackagingRule>): string[] {
+  const errors: string[] = [];
+  
+  if (!rule.name || rule.name.trim() === '') {
+    errors.push('Rule name is required');
+  }
+  
+  if (!rule.resultValue || rule.resultValue.trim() === '') {
+    errors.push('Result value is required');
+  }
+  
+  if (!rule.ruleType) {
+    errors.push('Rule type is required');
+  }
+  
+  if (!rule.conditions || rule.conditions.length === 0) {
+    errors.push('At least one condition is required');
+  }
+  
+  return errors;
+}
+
+/**
+ * Legacy function for backward compatibility
+ */
+export function validatePackagingRule(rule: Partial<PackagingRule>): string[] {
+  return validateRule(rule);
+}

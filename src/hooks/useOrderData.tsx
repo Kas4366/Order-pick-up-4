@@ -10,7 +10,7 @@ import { CsvColumnMapping, defaultCsvColumnMapping, LocalImagesFolderInfo } from
 import { VoiceSettings, defaultVoiceSettings } from '../types/VoiceSettings';
 import { StockTrackingItem } from '../types/StockTracking';
 import { CustomTag, defaultCustomTags } from '../types/CustomTags';
-import { PackagingRule, defaultPackagingRules, defaultPackagingTypes } from '../types/Packaging';
+import { PackagingRule, defaultPackagingRules, defaultPackagingTypes, defaultBoxRules, defaultBoxNames } from '../types/Packaging';
 import { evaluatePackagingRules } from '../utils/packagingRules';
 import { parseCsvFile } from '../utils/csvUtils';
 import { fileHandlePersistenceService } from '../services/fileHandlePersistenceService';
@@ -40,6 +40,9 @@ export const useOrderData = () => {
   const [packagingRules, setPackagingRules] = useState<PackagingRule[]>(defaultPackagingRules);
   const [customPackagingTypes, setCustomPackagingTypes] = useState<string[]>(defaultPackagingTypes);
   const [currentOrderPackagingType, setCurrentOrderPackagingType] = useState<string | null>(null);
+  const [boxRules, setBoxRules] = useState<PackagingRule[]>(defaultBoxRules);
+  const [customBoxNames, setCustomBoxNames] = useState<string[]>(defaultBoxNames);
+  const [currentOrderBoxName, setCurrentOrderBoxName] = useState<string | null>(null);
 
   // Local images folder state
   const [csvImagesFolderHandle, setCsvImagesFolderHandle] = useState<FileSystemDirectoryHandle | null>(null);
@@ -234,6 +237,32 @@ export const useOrderData = () => {
         setCustomPackagingTypes(defaultPackagingTypes);
       }
     }
+
+    // Load saved box rules
+    const savedBoxRules = localStorage.getItem('boxRules');
+    if (savedBoxRules) {
+      try {
+        const parsedBoxRules = JSON.parse(savedBoxRules);
+        console.log('📦 Loaded saved box rules from localStorage:', parsedBoxRules);
+        setBoxRules(parsedBoxRules);
+      } catch (e) {
+        console.error('Failed to parse saved box rules, using default:', e);
+        setBoxRules(defaultBoxRules);
+      }
+    }
+
+    // Load saved custom box names
+    const savedBoxNames = localStorage.getItem('customBoxNames');
+    if (savedBoxNames) {
+      try {
+        const parsedBoxNames = JSON.parse(savedBoxNames);
+        console.log('📦 Loaded saved box names from localStorage:', parsedBoxNames);
+        setCustomBoxNames(parsedBoxNames);
+      } catch (e) {
+        console.error('Failed to parse saved box names, using default:', e);
+        setCustomBoxNames(defaultBoxNames);
+      }
+    }
     // Load other settings
     const savedAutoComplete = localStorage.getItem('autoCompleteEnabled');
     if (savedAutoComplete) {
@@ -281,14 +310,22 @@ export const useOrderData = () => {
 
   // Evaluate packaging rules when current order changes
   useEffect(() => {
-    if (currentOrder && packagingRules.length > 0) {
-      const packagingType = evaluatePackagingRules(currentOrder, packagingRules);
+    if (currentOrder) {
+      // Evaluate packaging rules
+      const packagingType = evaluatePackagingRules(currentOrder, packagingRules, 'packaging');
       setCurrentOrderPackagingType(packagingType);
       console.log('📦 Determined packaging type for current order:', packagingType);
+
+      // Evaluate box rules
+      const boxName = evaluatePackagingRules(currentOrder, boxRules, 'box');
+      setCurrentOrderBoxName(boxName);
+      console.log('📦 Determined box name for current order:', boxName);
     } else {
       setCurrentOrderPackagingType(null);
+      setCurrentOrderBoxName(null);
     }
-  }, [currentOrder, packagingRules]);
+  }, [currentOrder, packagingRules, boxRules]);
+
 
   // Archive orders when they are loaded (with file name extraction)
   const archiveOrdersWithFileName = async (ordersToArchive: Order[], sourceFile?: File) => {
@@ -376,6 +413,20 @@ export const useOrderData = () => {
     console.log('📦 Saving custom packaging types to localStorage:', types);
     setCustomPackagingTypes(types);
     localStorage.setItem('customPackagingTypes', JSON.stringify(types));
+  };
+
+  // Box rules management
+  const saveBoxRules = (rules: PackagingRule[]) => {
+    console.log('📦 Saving box rules to localStorage:', rules);
+    setBoxRules(rules);
+    localStorage.setItem('boxRules', JSON.stringify(rules));
+  };
+
+  // Custom box names management
+  const saveCustomBoxNames = (names: string[]) => {
+    console.log('📦 Saving custom box names to localStorage:', names);
+    setCustomBoxNames(names);
+    localStorage.setItem('customBoxNames', JSON.stringify(names));
   };
   // CSV Images Folder management
   const setCsvImagesFolder = async () => {
@@ -1151,6 +1202,11 @@ export const useOrderData = () => {
     customPackagingTypes,
     saveCustomPackagingTypes,
     currentOrderPackagingType,
+    boxRules,
+    saveBoxRules,
+    customBoxNames,
+    saveCustomBoxNames,
+    currentOrderBoxName,
     // Other settings
     autoCompleteEnabled,
     saveOtherSettings,
