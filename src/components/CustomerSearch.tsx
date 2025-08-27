@@ -262,9 +262,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
         
         {searchMode === 'scanner' && (
          <div>
-           <p className="font-medium text-green-700 mb-1">🔍 Scanner Mode Active</p>
-           <p>Scan shipping labels to extract buyer postcodes automatically</p>
-           <p className="text-green-600 mt-1">✓ Global scanning enabled - QR codes will be detected anywhere on screen</p>
+           <p className="font-medium text-green-700">🔍 Scanner Mode Active</p>
          </div>
         )}
         

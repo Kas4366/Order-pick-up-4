@@ -108,10 +108,10 @@ class FileHandlePersistenceService {
         const result = request.result;
         
         if (result && result.handle) {
-          console.log(`✅ Found saved file handle for: ${key} (folder: ${result.folderName})`);
+          console.log(`✅ fileHandlePersistenceService: Found saved file handle for: ${key} (folder: ${result.folderName}, savedAt: ${result.savedAt})`);
           resolve(result.handle);
         } else {
-          console.log(`⚠️ No saved file handle found for: ${key}`);
+          console.log(`⚠️ fileHandlePersistenceService: No saved file handle found in IndexedDB for key: ${key}`);
           resolve(null);
         }
       };
@@ -126,35 +126,35 @@ class FileHandlePersistenceService {
   // Check if a handle is still valid and request permission
   async validateAndRequestPermission(handle: FileSystemDirectoryHandle): Promise<boolean> {
     try {
-      console.log(`🔐 Checking permission for folder: ${handle.name}`);
+      console.log(`🔐 fileHandlePersistenceService: Checking permission for folder: ${handle.name}`);
       
       // Check current permission status
       const permission = await handle.queryPermission({ mode: 'read' });
-      console.log(`🔐 Current permission status: ${permission}`);
+      console.log(`🔐 fileHandlePersistenceService: Current permission status for ${handle.name}: ${permission}`);
       
       if (permission === 'granted') {
-        console.log('✅ Permission already granted');
+        console.log(`✅ fileHandlePersistenceService: Permission already granted for ${handle.name}`);
         return true;
       }
       
       if (permission === 'prompt') {
-        console.log('🔐 Requesting permission from user...');
+        console.log(`🔐 fileHandlePersistenceService: Requesting permission from user for ${handle.name}...`);
         const newPermission = await handle.requestPermission({ mode: 'read' });
-        console.log(`🔐 User response: ${newPermission}`);
+        console.log(`🔐 fileHandlePersistenceService: User permission response for ${handle.name}: ${newPermission}`);
         
         if (newPermission === 'granted') {
-          console.log('✅ Permission granted by user');
+          console.log(`✅ fileHandlePersistenceService: Permission granted by user for ${handle.name}`);
           return true;
         } else {
-          console.log('❌ Permission denied by user');
+          console.log(`❌ fileHandlePersistenceService: Permission denied by user for ${handle.name}`);
           return false;
         }
       }
       
-      console.log('❌ Permission denied');
+      console.log(`❌ fileHandlePersistenceService: Permission denied for ${handle.name}`);
       return false;
     } catch (error) {
-      console.error('❌ Error checking/requesting permission:', error);
+      console.error(`❌ fileHandlePersistenceService: Error checking/requesting permission for ${handle.name}:`, error);
       return false;
     }
   }

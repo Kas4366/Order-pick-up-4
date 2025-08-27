@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layout } from '../components/Layout';
+import { ImagePreviewModal } from '../components/ImagePreviewModal';
 import { FileUploadArea } from '../components/FileUploadArea';
 import { OrderDisplay } from '../components/OrderDisplay';
 import { NoOrdersState } from '../components/NoOrdersState';
@@ -53,6 +53,11 @@ export const OrderPickView: React.FC = () => {
     // Other settings
     autoCompleteEnabled,
     saveOtherSettings,
+    updateStockTrackingItem,
+    // Image preview functionality
+    imagePreviewModal,
+    handlePreviewImageBySku,
+    closeImagePreviewModal,
     searchMessage,
     setSearchMessage,
     // CSV Images Folder
@@ -68,8 +73,6 @@ export const OrderPickView: React.FC = () => {
     customPackagingTypes,
     saveCustomPackagingTypes,
     currentOrderPackagingType,
-    // Stock tracking update
-    updateStockTrackingItem,
   } = useOrderData();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -252,6 +255,7 @@ export const OrderPickView: React.FC = () => {
                 onUnmarkForReorder={removeStockTrackingItem}
                 autoCompleteEnabled={autoCompleteEnabled}
                 packagingType={currentOrderPackagingType}
+                onPreviewImageBySku={handlePreviewImageBySku}
               />
             ) : (
               <NoOrdersState 
@@ -285,7 +289,6 @@ export const OrderPickView: React.FC = () => {
         onRemoveStockItem={removeStockTrackingItem}
         onClearAllStockItems={clearAllStockTrackingItems}
         onUpdateStockItem={updateStockTrackingItem}
-        onUpdateStockItem={updateStockTrackingItem}
         csvImagesFolderHandle={csvImagesFolderHandle}
         customTags={customTags}
         onSaveCustomTags={saveCustomTags}
@@ -304,6 +307,16 @@ export const OrderPickView: React.FC = () => {
         // Other settings
         autoCompleteEnabled={autoCompleteEnabled}
         onSaveOtherSettings={saveOtherSettings}
+        csvImagesFolderHandle={csvImagesFolderHandle}
+      />
+
+      <ImagePreviewModal
+        isOpen={imagePreviewModal.isOpen}
+        onClose={closeImagePreviewModal}
+        imageUrl={imagePreviewModal.imageUrl}
+        sku={imagePreviewModal.sku}
+        message={imagePreviewModal.message}
+        isLoading={imagePreviewModal.isLoading}
       />
     </div>
   );

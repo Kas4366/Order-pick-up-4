@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { MapPin, Box, Check, Volume2, VolumeX, Package, User, Hash, AlertTriangle, Clock, DollarSign, Calendar, Truck, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { MapPin, Box, Check, Volume2, VolumeX, Package, User, Hash, AlertTriangle, Clock, DollarSign, Calendar, Truck, CheckCircle, ChevronDown, ChevronUp, Image } from 'lucide-react';
 import { Order } from '../types/Order';
 import { VoiceSettings } from '../types/VoiceSettings';
 import { StockTrackingItem } from '../types/StockTracking';
@@ -26,6 +26,7 @@ interface OrderDisplayProps {
   onUnmarkForReorder: (sku: string, markedDate: string) => void;
   autoCompleteEnabled?: boolean;
   packagingType?: string | null;
+  onPreviewImageBySku?: (sku: string) => void;
 }
 
 export const OrderDisplay: React.FC<OrderDisplayProps> = ({ 
@@ -38,7 +39,8 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
   stockTrackingItems,
   onUnmarkForReorder,
   autoCompleteEnabled = false,
-  packagingType
+  packagingType,
+  onPreviewImageBySku
 }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -575,7 +577,18 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                           <h5 className="text-xs font-medium text-blue-700 mb-1">SKU</h5>
-                          <p className="text-lg font-bold text-blue-900">{item.sku}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-lg font-bold text-blue-900">{item.sku}</p>
+                            {onPreviewImageBySku && (
+                              <button
+                                onClick={() => onPreviewImageBySku(item.sku)}
+                                className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors"
+                                title={`Preview image for ${item.sku}`}
+                              >
+                                <Image className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         
                         <div>
@@ -708,7 +721,18 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
                 <div className="space-y-3">
                   <div>
                     <h5 className="text-xs font-medium text-blue-700 mb-1">SKU</h5>
-                    <p className="text-lg font-bold text-blue-900">{order.sku}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-lg font-bold text-blue-900">{order.sku}</p>
+                      {onPreviewImageBySku && (
+                        <button
+                          onClick={() => onPreviewImageBySku(order.sku)}
+                          className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors"
+                          title={`Preview image for ${order.sku}`}
+                        >
+                          <Image className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   
                   <div>

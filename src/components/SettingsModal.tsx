@@ -37,7 +37,7 @@ interface SettingsModalProps {
   stockTrackingItems: StockTrackingItem[];
   onRemoveStockItem: (sku: string, markedDate: string) => void;
   onClearAllStockItems: () => void;
-  onUpdateStockItem: (sku: string, markedDate: string, updates: Partial<StockTrackingItem>) => void;
+  onUpdateStockItem?: (sku: string, markedDate: string, updates: Partial<StockTrackingItem>) => void;
   // Custom tags props
   customTags?: CustomTag[];
   onSaveCustomTags?: (tags: CustomTag[]) => void;
@@ -96,7 +96,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSaveCustomPackagingTypes = () => {},
   autoCompleteEnabled = false,
   onSaveOtherSettings,
-  csvImagesFolderHandle,
 }) => {
   const [activeTab, setActiveTab] = useState<'archive' | 'tags' | 'packaging' | 'selro' | 'veeqo' | 'files' | 'csv' | 'voice' | 'stock' | 'other'>('archive');
 
@@ -329,11 +328,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {activeTab === 'stock' && (
             <StockTrackingTab
-              trackedItems={stockTrackingItems}
+              stockItems={stockTrackingItems}
               onRemoveItem={onRemoveStockItem}
-              onClearAll={onClearAllStockItems}
               onUpdateItem={onUpdateStockItem}
-              csvImagesFolderHandle={csvImagesFolderHandle}
+              csvImagesFolderInfo={csvImagesFolderInfo}
+              onSetCsvImagesFolder={onSetCsvImagesFolder}
             />
           )}
 

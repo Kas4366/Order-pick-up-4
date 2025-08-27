@@ -53,32 +53,43 @@ export const useOrderData = () => {
   const [lastScannedData, setLastScannedData] = useState<string>('');
   const [searchMessage, setSearchMessage] = useState<string>('');
 
+  // Image preview modal state
+  const [imagePreviewModal, setImagePreviewModal] = useState({
+    isOpen: false,
+    imageUrl: '',
+    sku: '',
+    message: '',
+    isLoading: false
+  });
+
   // Function to restore CSV images folder handle from persistence
   const restoreCsvImagesFolderHandle = async () => {
     try {
-      console.log('🔄 Attempting to restore CSV images folder handle...');
+      console.log('🔄 useOrderData: Attempting to restore CSV images folder handle...');
       
       const savedHandle = await fileHandlePersistenceService.getHandle('csvImagesFolder');
       
       if (savedHandle) {
-        console.log(`🔍 Found saved handle for folder: ${savedHandle.name}`);
+        console.log(`🔍 useOrderData: Found saved handle for folder: ${savedHandle.name}`);
         
         // Validate and request permission
         const hasPermission = await fileHandlePersistenceService.validateAndRequestPermission(savedHandle);
         
+        console.log(`🔐 useOrderData: Permission validation result: ${hasPermission}`);
+        
         if (hasPermission) {
           setCsvImagesFolderHandle(savedHandle);
-          console.log(`✅ Successfully restored access to images folder: ${savedHandle.name}`);
+          console.log(`✅ useOrderData: Successfully restored access to images folder: ${savedHandle.name}`);
         } else {
-          console.log('❌ Permission denied for saved folder handle');
+          console.log('❌ useOrderData: Permission denied for saved folder handle');
           setCsvImagesFolderHandle(null);
         }
       } else {
-        console.log('⚠️ No saved folder handle found');
+        console.log('⚠️ useOrderData: No saved folder handle found in IndexedDB');
         setCsvImagesFolderHandle(null);
       }
     } catch (error) {
-      console.error('❌ Error restoring CSV images folder handle:', error);
+      console.error('❌ useOrderData: Error restoring CSV images folder handle:', error);
       setCsvImagesFolderHandle(null);
     }
   };
@@ -96,17 +107,17 @@ export const useOrderData = () => {
         await fileHandlePersistenceService.init();
         console.log('✅ File handle persistence service initialized');
         
-        // Try to restore CSV images folder handle if info exists
-        if (csvImagesFolderInfo) {
-          await restoreCsvImagesFolderHandle();
-        }
+        // Always try to restore CSV images folder handle from IndexedDB
+        console.log('🔄 useOrderData: Attempting to restore CSV images folder handle unconditionally...');
+        await restoreCsvImagesFolderHandle();
       } catch (error) {
         console.error('❌ Failed to initialize archive system:', error);
       }
     };
 
     initializeArchive();
-  }, [csvImagesFolderInfo]);
+  }
+  )
 
   // Load saved settings on component mount
   useEffect(() => {
@@ -613,24 +624,37 @@ export const useOrderData = () => {
   // Handle marking items for reorder
   const handleMarkForReorder = (order: Order) => {
     if (order.remainingStock === undefined) return;
+    
+    console.log('📦 useOrderData: Marking item for reorder:', {
+      sku: order.sku,
+      orderNumber: order.orderNumber,
+      hasImageUrl: !!order.imageUrl,
+      isLocalImage: order._isLocalImage,
+      originalSkuForLocalImage: order._originalSkuForLocalImage,
+      csvImagesFolderInfo: csvImagesFolderInfo
+    });
 
     const newItem: StockTrackingItem = {
       sku: order.sku,
       markedDate: new Date().toISOString(),
       orderNumber: order.orderNumber,
-      customerName: order.customerName,
+      customer: order.customerName,
       currentStock: order.remainingStock,
       location: order.location,
-      imageUrl: order.imageUrl,
-    };
-
-    // Add local image source info if this was a local image
-    if (order._isLocalImage && order._originalSkuForLocalImage && csvImagesFolderInfo) {
-      newItem.localImageSource = {
+      imageUrl: order.imageUrl, // Include image URL from order
+      // Include local image source info if this was a local image
+      localImageSource: order._isLocalImage && order._originalSkuForLocalImage && csvImagesFolderInfo ? {
         sku: order._originalSkuForLocalImage,
         folderName: csvImagesFolderInfo.folderName
-      };
-    }
+      } : undefined,
+    };
+    
+    console.log('📦 useOrderData: Created new stock tracking item:', {
+      sku: newItem.sku,
+      hasImageUrl: !!newItem.imageUrl,
+      hasLocalImageSource: !!newItem.localImageSource,
+      localImageSourceDetails: newItem.localImageSource
+    });
 
     // Check if item is already tracked
     const existingItem = stockTrackingItems.find(item => 
@@ -642,7 +666,14 @@ export const useOrderData = () => {
       const updatedItems = [...stockTrackingItems, newItem];
       setStockTrackingItems(updatedItems);
       localStorage.setItem('stockTrackingItems', JSON.stringify(updatedItems));
-      console.log('📦 Added item to stock tracking:', newItem);
+      console.log('📦 useOrderData: Added item to stock tracking and saved to localStorage:', {
+        sku: newItem.sku,
+        totalItems: updatedItems.length,
+        hasImageUrl: !!newItem.imageUrl,
+        hasLocalImageSource: !!newItem.localImageSource
+      });
+    } else {
+      console.log('📦 useOrderData: Item already exists in stock tracking:', order.sku);
     }
   };
 
@@ -661,21 +692,6 @@ export const useOrderData = () => {
     setStockTrackingItems([]);
     localStorage.removeItem('stockTrackingItems');
     console.log('📦 Cleared all stock tracking items');
-  };
-
-  // Update stock tracking item
-  const updateStockTrackingItem = (sku: string, markedDate: string, updates: Partial<StockTrackingItem>) => {
-    const updatedItems = stockTrackingItems.map(item => {
-      if (item.sku === sku && item.markedDate === markedDate) {
-        const updatedItem = { ...item, ...updates };
-        console.log('📦 Updated stock tracking item:', updatedItem);
-        return updatedItem;
-      }
-      return item;
-    });
-    
-    setStockTrackingItems(updatedItems);
-    localStorage.setItem('stockTrackingItems', JSON.stringify(updatedItems));
   };
 
   // Normalize postcode for comparison (remove spaces and convert to uppercase)
@@ -878,6 +894,36 @@ export const useOrderData = () => {
     console.log('💾 Saved other settings:', settings);
   };
 
+  // Update stock tracking item
+  const updateStockTrackingItem = (sku: string, markedDate: string, updates: Partial<StockTrackingItem>) => {
+    console.log('📦 useOrderData: Updating stock tracking item:', {
+      sku,
+      markedDate,
+      updates,
+      hasImageUrlUpdate: !!updates.imageUrl
+    });
+    
+    const updatedItems = stockTrackingItems.map(item => {
+      if (item.sku === sku && item.markedDate === markedDate) {
+        const updatedItem = { ...item, ...updates };
+        console.log('📦 useOrderData: Item updated:', {
+          sku: updatedItem.sku,
+          hasImageUrl: !!updatedItem.imageUrl,
+          hasLocalImageSource: !!updatedItem.localImageSource
+        });
+        return updatedItem;
+      }
+      return item;
+    });
+    setStockTrackingItems(updatedItems);
+    localStorage.setItem('stockTrackingItems', JSON.stringify(updatedItems));
+    console.log('📦 useOrderData: Updated stock tracking item and saved to localStorage:', {
+      sku,
+      updates,
+      totalItems: updatedItems.length
+    });
+  };
+
   // Handle order completion
   const handleOrderComplete = async (order: Order) => {
     try {
@@ -926,7 +972,7 @@ export const useOrderData = () => {
       sku: archivedOrder.sku,
       quantity: archivedOrder.quantity,
       location: archivedOrder.location,
-      imageUrl: archivedOrder.imageUrl,
+      imageUrl: archivedOrder.imageUrl, // This will be updated below if local image exists
       itemName: archivedOrder.itemName,
       buyerPostcode: archivedOrder.buyerPostcode,
       remainingStock: archivedOrder.remainingStock,
@@ -944,7 +990,7 @@ export const useOrderData = () => {
     };
     
     // Try to restore local image if it was originally from a local folder
-    if (archivedOrder.localImageSource && !orderFromArchive.imageUrl) {
+    if (archivedOrder.localImageSource) {
       try {
         console.log('🖼️ Attempting to restore local image for archived order...');
         
@@ -983,6 +1029,74 @@ export const useOrderData = () => {
     // Show file date info
     const fileDate = archivedOrder.fileDate ? new Date(archivedOrder.fileDate).toLocaleDateString('en-GB') : 'Unknown date';
     console.log(`✅ Loaded archived order from ${archivedOrder.fileName} (${fileDate})`);
+  };
+
+  // Handle image preview by SKU
+  const handlePreviewImageBySku = async (sku: string) => {
+    console.log(`🔍 Preview image requested for SKU: ${sku}`);
+    
+    // Open modal in loading state
+    setImagePreviewModal({
+      isOpen: true,
+      sku: sku,
+      imageUrl: '',
+      message: '',
+      isLoading: true
+    });
+    
+    try {
+      // Check if local images folder is available
+      if (!csvImagesFolderHandle) {
+        setImagePreviewModal(prev => ({
+          ...prev,
+          isLoading: false,
+          message: 'No local images folder selected. Please select a local images folder in the CSV Upload settings.'
+        }));
+        return;
+      }
+      
+      console.log(`🖼️ Searching for image in folder: ${csvImagesFolderHandle.name}`);
+      
+      // Search for image using the SKU
+      const imageUrl = await findImageFile(csvImagesFolderHandle, sku);
+      
+      if (imageUrl) {
+        console.log(`✅ Found image for SKU: ${sku}`);
+        setImagePreviewModal(prev => ({
+          ...prev,
+          isLoading: false,
+          imageUrl: imageUrl,
+          message: ''
+        }));
+      } else {
+        console.log(`❌ No image found for SKU: ${sku}`);
+        setImagePreviewModal(prev => ({
+          ...prev,
+          isLoading: false,
+          imageUrl: '',
+          message: `No image found for SKU "${sku}" in the local images folder "${csvImagesFolderHandle.name}".`
+        }));
+      }
+    } catch (error) {
+      console.error(`❌ Error searching for image for SKU ${sku}:`, error);
+      setImagePreviewModal(prev => ({
+        ...prev,
+        isLoading: false,
+        imageUrl: '',
+        message: `Error searching for image: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }));
+    }
+  };
+
+  // Close image preview modal
+  const closeImagePreviewModal = () => {
+    setImagePreviewModal({
+      isOpen: false,
+      sku: '',
+      imageUrl: '',
+      message: '',
+      isLoading: false
+    });
   };
 
   return {
@@ -1043,5 +1157,9 @@ export const useOrderData = () => {
     searchMessage,
     setSearchMessage,
     updateStockTrackingItem,
+    // Image preview functionality
+    imagePreviewModal,
+    handlePreviewImageBySku,
+    closeImagePreviewModal,
   };
 };
