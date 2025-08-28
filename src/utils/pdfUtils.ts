@@ -520,7 +520,7 @@ async function findImageFileForHtml(
   originalFilename: string, 
   sku: string
 ): Promise<string> {
-  console.log(`🔍 Starting image search for filename: "${originalFilename}", SKU: "${sku}"`);
+  console.log(`🔍 Starting STRICT image search for filename: "${originalFilename}", SKU: "${sku}"`);
   console.log(`📁 Searching in folder: "${imagesFolderHandle.name}"`);
   
   // First, try the exact filename as provided
@@ -535,44 +535,28 @@ async function findImageFileForHtml(
     console.log(`❌ Exact filename not found: "${originalFilename}"`);
   }
   
-  // If exact match fails, try variations
+  // If exact filename fails, try exact SKU with extensions only
   const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
   
-  // List of filenames to try
-  const filenamesToTry = [
-    originalFilename.toLowerCase(), // Lowercase version
-    originalFilename.toUpperCase(), // Uppercase version
-  ];
-  
-  // Also try using the SKU as filename with different extensions
-  const cleanSku = sku.replace(/[^a-zA-Z0-9]/g, ''); // Remove special characters
+  // Only try exact SKU with extensions
+  const filenamesToTry: string[] = [];
   imageExtensions.forEach(ext => {
     filenamesToTry.push(`${sku}.${ext}`);
-    filenamesToTry.push(`${cleanSku}.${ext}`);
-    filenamesToTry.push(`${sku.toLowerCase()}.${ext}`);
-    filenamesToTry.push(`${cleanSku.toLowerCase()}.${ext}`);
+    filenamesToTry.push(`${sku}.${ext.toUpperCase()}`);
   });
   
-  // If original filename has no extension, try adding common extensions
-  if (!originalFilename.includes('.')) {
-    imageExtensions.forEach(ext => {
-      filenamesToTry.push(`${originalFilename}.${ext}`);
-      filenamesToTry.push(`${originalFilename.toLowerCase()}.${ext}`);
-    });
-  }
-  
-  console.log(`🔍 Trying ${filenamesToTry.length} filename variations...`);
+  console.log(`🔍 Trying ${filenamesToTry.length} exact SKU filename variations...`);
   
   // Try to find any of these filenames
   for (const filename of filenamesToTry) {
     try {
-      console.log(`🔍 Trying variation: "${filename}"`);
+      console.log(`🔍 Trying exact SKU filename: "${filename}"`);
       const imageFileHandle = await imagesFolderHandle.getFileHandle(filename);
       const imageFile = await imageFileHandle.getFile();
       
       // Create a blob URL for the image
       const imageUrl = URL.createObjectURL(imageFile);
-      console.log(`✅ Found variation match: "${filename}" (${imageFile.size} bytes)`);
+      console.log(`✅ Found exact SKU match: "${filename}" (${imageFile.size} bytes)`);
       return imageUrl;
     } catch (error) {
       // File not found, continue to next filename
@@ -580,52 +564,8 @@ async function findImageFileForHtml(
     }
   }
   
-  // If no exact match found, try to list all files in the folder and find a partial match
-  try {
-    console.log('🔍 No exact match found, scanning all files in images folder...');
-    const allFiles: string[] = [];
-    
-    for await (const [name, handle] of imagesFolderHandle.entries()) {
-      if (handle.kind === 'file') {
-        allFiles.push(name);
-      }
-    }
-    
-    console.log(`📁 Available image files (${allFiles.length}):`, allFiles.slice(0, 10), allFiles.length > 10 ? '...' : '');
-    
-    // Try to find a file that contains the SKU or part of the original filename
-    const skuLower = sku.toLowerCase();
-    const cleanSkuLower = cleanSku.toLowerCase();
-    const originalFilenameLower = originalFilename.toLowerCase();
-    
-    // Extract the base name from the original filename (without extension)
-    const originalBaseName = originalFilename.split('.')[0].toLowerCase();
-    
-    for (const fileName of allFiles) {
-      const fileNameLower = fileName.toLowerCase();
-      
-      // Check if filename contains the SKU, clean SKU, or original filename parts
-      if (fileNameLower.includes(skuLower) || 
-          fileNameLower.includes(cleanSkuLower) ||
-          fileNameLower.includes(originalBaseName) ||
-          originalFilenameLower.includes(fileNameLower.split('.')[0])) {
-        try {
-          console.log(`🎯 Found potential match: "${fileName}"`);
-          const imageFileHandle = await imagesFolderHandle.getFileHandle(fileName);
-          const imageFile = await imageFileHandle.getFile();
-          const imageUrl = URL.createObjectURL(imageFile);
-          console.log(`✅ Successfully loaded image by partial match: "${fileName}"`);
-          return imageUrl;
-        } catch (error) {
-          continue;
-        }
-      }
-    }
-    
-    console.warn(`⚠️  No image found for SKU: "${sku}" with filename: "${originalFilename}" in folder with ${allFiles.length} files`);
-  } catch (error) {
-    console.error('❌ Error scanning images folder:', error);
-  }
+  console.warn(`⚠️ No exact image match found for SKU: "${sku}" with original filename: "${originalFilename}"`);
+  console.log(`📋 Searched for exact filenames: ${filenamesToTry.join(', ')}`);
   
   return '';
 }

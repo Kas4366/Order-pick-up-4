@@ -82,9 +82,10 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                     <div className="mt-4 p-3 bg-blue-50 rounded-lg text-left">
                       <p className="text-sm text-blue-800 font-medium mb-2">The app searched for:</p>
                       <div className="text-xs text-blue-700 space-y-1">
-                        <p>• {sku}.jpg, {sku}.png, {sku}.jpeg, etc.</p>
-                        <p>• {sku.toLowerCase()}.jpg, {sku.toLowerCase()}.png, etc.</p>
-                        <p>• Files containing "{sku}" in the filename</p>
+                        <p>• {sku}.jpg, {sku}.JPG</p>
+                        <p>• {sku}.png, {sku}.PNG</p>
+                        <p>• {sku}.jpeg, {sku}.JPEG</p>
+                        <p>• And other supported extensions (gif, webp, bmp, svg)</p>
                       </div>
                     </div>
                   </>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Search, QrCode, ArrowUp, ArrowDown, Scan } from 'lucide-react';
 
 interface CustomerSearchProps {
@@ -19,15 +19,19 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
   const [searchInput, setSearchInput] = useState('');
   const [searchMode, setSearchMode] = useState<'manual' | 'scanner' | 'arrows'>('manual');
   const [lastScannedPostcode, setLastScannedPostcode] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Listen for barcode scanner input and arrow key navigation
+  // Auto-focus and select input when switching to scanner mode
   useEffect(() => {
-    let buffer = '';
-    let lastKeyTime = Date.now();
+    if (searchMode === 'scanner' && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [searchMode]);
 
+  // Simplified keydown listener - only handles Enter key in scanner mode and arrow keys in arrow mode
+  useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      const currentTime = Date.now();
-      
       // Handle arrow key navigation when in arrow mode
       if (searchMode === 'arrows') {
         if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -39,66 +43,53 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
         }
       }
       
-     // Only process scanner input when in scanner mode
-     if (searchMode !== 'scanner') {
-       return;
-     }
-     
-     // If the delay between keystrokes is > 100ms, assume it's manual typing or new scan
-     if (currentTime - lastKeyTime > 100) {
-       buffer = '';
-     }
-     
-     // Ignore if user is actively typing in an input field (but allow scanner input everywhere else)
-     if (document.activeElement?.tagName === 'INPUT' || 
-         document.activeElement?.tagName === 'TEXTAREA') {
-       // Only ignore if the user is actually typing (not just clicked on an input)
-       // We can detect this by checking if the input has focus AND the keystroke timing suggests manual typing
-       if (currentTime - lastKeyTime <= 100) {
-         // Fast keystrokes suggest scanner input, process even if input is focused
-       } else {
-         // Slow keystrokes suggest manual typing, ignore
-         return;
-       }
-     }
-
-      if (e.key === 'Enter') {
-        if (buffer) {
-          console.log('📱 Detected QR code scan:', buffer);
+      // Handle Enter key in scanner mode
+      if (searchMode === 'scanner' && e.key === 'Enter') {
+        e.preventDefault(); // Prevent form submission
+        
+        // Get the complete scanned data from the input field
+        const scannedData = inputRef.current?.value || '';
+        
+        if (scannedData.trim()) {
+          console.log('📱 QR scan completed:', scannedData);
           
-          // Extract postcode from QR data
-          const extractedPostcode = extractPostcodeFromQRData(buffer);
-          
-          if (extractedPostcode) {
-            console.log('📮 Extracted postcode from QR scan:', extractedPostcode);
-            setSearchInput(extractedPostcode);
-            setLastScannedPostcode(extractedPostcode);
-            
-            // Automatically search for orders with this postcode
-            onCustomerSearch(extractedPostcode);
-          } else {
-            console.log('⚠️ No valid postcode found in QR data');
-            // Still call the QR scan handler for backward compatibility
-            if (onQRCodeScan) {
-              onQRCodeScan(buffer);
-            }
+          // Clear any previous search messages
+          if (onClearMessage) {
+            onClearMessage();
           }
           
-          buffer = '';
+          // Process the scanned data
+          processScannedData(scannedData);
+          
+          // Immediately select all text so next scan will replace it
+          setTimeout(() => {
+            if (inputRef.current) {
+              inputRef.current.select();
+            }
+          }, 50);
         }
-      } else {
-       // Only add printable characters to buffer (ignore modifier keys, function keys, etc.)
-       if (e.key.length === 1) {
-         buffer += e.key;
-       }
       }
-      
-      lastKeyTime = currentTime;
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [onCustomerSearch, onQRCodeScan, onArrowNavigation, searchMode]);
+  }, [searchMode, onArrowNavigation, onCustomerSearch, onClearMessage]);
+
+  // Process scanned data - extract postcode or use as order number
+  const processScannedData = (scannedData: string) => {
+    // First try to extract a postcode from the QR data
+    const extractedPostcode = extractPostcodeFromQRData(scannedData);
+    
+    if (extractedPostcode) {
+      console.log('📮 Extracted postcode from QR scan:', extractedPostcode);
+      setLastScannedPostcode(extractedPostcode);
+      onCustomerSearch(extractedPostcode);
+    } else {
+      // If no postcode found, treat the scanned data as a potential order number or customer name
+      console.log('🔍 No postcode found, searching with raw scanned data:', scannedData);
+      onCustomerSearch(scannedData);
+    }
+  };
 
   // Extract postcodes from QR code data
   const extractPostcodeFromQRData = (qrData: string): string => {
@@ -136,32 +127,18 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
     if (onClearMessage && searchMessage) {
       onClearMessage();
     }
-    
-    // Auto-detect QR code data and process immediately in scanner mode
-    if (searchMode === 'scanner' && value.length > 20 && (value.includes('\n') || value.includes('JGB') || value.includes('GB'))) {
-      const extractedPostcode = extractPostcodeFromQRData(value);
-      
-      if (extractedPostcode) {
-        console.log('📮 Extracted postcode from manual input:', extractedPostcode);
-        setSearchInput(extractedPostcode);
-        setLastScannedPostcode(extractedPostcode);
-        onCustomerSearch(extractedPostcode);
-      } else if (onQRCodeScan) {
-        onQRCodeScan(value);
-      }
-    }
   };
 
   const handleModeChange = (newMode: 'manual' | 'scanner' | 'arrows') => {
     setSearchMode(newMode);
     
-    // Clear search input when switching modes, except when switching to scanner mode
-    // and we have a last scanned postcode
-    if (newMode === 'scanner' && lastScannedPostcode) {
-      setSearchInput(lastScannedPostcode);
-    } else if (newMode !== 'scanner') {
-      setSearchInput('');
-      setLastScannedPostcode('');
+    // Clear search input when switching modes
+    setSearchInput('');
+    setLastScannedPostcode('');
+    
+    // Clear any search messages
+    if (onClearMessage) {
+      onClearMessage();
     }
   };
 
@@ -215,16 +192,16 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
       <form onSubmit={handleSubmit} className="w-full">
         <div className="relative">
           <input
+            ref={inputRef}
             type="text"
+            id="customer-search-input"
             value={searchInput}
             onChange={handleInputChange}
             placeholder={
               searchMode === 'manual' 
                 ? "Search by customer name, order ID, or postcode..."
                 : searchMode === 'scanner'
-                ? lastScannedPostcode 
-                  ? `${lastScannedPostcode} - Scan next label to replace...`
-                  : "Scan QR code - postcode will appear here..."
+                ? "Scan QR code - data will appear here..."
                 : "Use arrow keys to navigate orders..."
             }
             className="w-full px-4 py-2 pl-10 pr-12 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -263,6 +240,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
         {searchMode === 'scanner' && (
          <div>
            <p className="font-medium text-green-700">🔍 Scanner Mode Active</p>
+           <p>Scan QR codes - each scan will replace the previous data</p>
          </div>
         )}
         

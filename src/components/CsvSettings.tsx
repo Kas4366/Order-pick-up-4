@@ -310,7 +310,7 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
             <div className="text-gray-800">• ITEM-789.webp</div>
           </div>
           <p className="text-xs text-green-700 mt-2">
-            The app will try various filename combinations including exact SKU match, with/without special characters, and different cases.
+            The app will look for images named exactly as the SKU with supported extensions (e.g., ABC-123.jpg, XYZ456.png).
           </p>
           
           {/* Persistence Info */}
@@ -507,7 +507,7 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
           <p>✅ <strong>File date tracking:</strong> File modification date is automatically recorded for each order</p>
           <p>✅ <strong>Channel tracking:</strong> Map channel type and channel columns to display sales platform information</p>
           <p>✅ <strong>Packaging tracking:</strong> Map packaging type column to display packaging requirements</p>
-          <p>✅ <strong>Flexible image matching:</strong> Supports various filename formats and automatically finds the best match</p>
+          <p>✅ <strong>Strict image matching:</strong> Images must be named exactly as the SKU with supported extensions</p>
         </div>
       </div>
 
