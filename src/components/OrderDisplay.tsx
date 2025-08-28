@@ -222,7 +222,7 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
   };
 
   // FIXED CHECKBOX TOGGLE FUNCTION
-  const handleCheckboxToggle = () => {
+  const handleCheckboxToggle = async () => {
     console.log('🔘 Checkbox toggle triggered, current tracked item:', !!currentTrackedItem);
     console.log('🔘 Order details:', { orderNumber: order.orderNumber, sku: order.sku, customerName: order.customerName });
     console.log('🔘 Stock tracking items count:', stockTrackingItems.length);
@@ -235,6 +235,23 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
       // Item is not tracked, so mark it
       console.log('🔘 Marking item for reorder');
       onMarkForReorder(order);
+      
+      // Copy item details to clipboard in the specified format
+      try {
+        const sku = order.sku;
+        const quantity = order.quantity;
+        const sellingPrice = order.orderValue !== undefined ? formatCurrency(order.orderValue) : 'N/A';
+        const binLocation = order.location || 'N/A';
+        const channelType = order.channelType || 'N/A';
+        
+        const clipboardText = `(${sku}) (${quantity}) (${sellingPrice}) (${binLocation}) (${channelType})`;
+        
+        await navigator.clipboard.writeText(clipboardText);
+        console.log('📋 Copied to clipboard:', clipboardText);
+      } catch (error) {
+        console.warn('⚠️ Failed to copy to clipboard:', error);
+        // Don't show error to user - clipboard copy is a nice-to-have feature
+      }
     }
   };
 
