@@ -27,6 +27,7 @@ interface OrderDisplayProps {
   autoCompleteEnabled?: boolean;
   packagingType?: string | null;
   currentOrderBoxName?: string | null;
+  currentOrderBoxColor?: string | null;
   onPreviewImageBySku?: (sku: string) => void;
 }
 
@@ -42,6 +43,7 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
   autoCompleteEnabled = false,
   packagingType,
   currentOrderBoxName,
+  currentOrderBoxColor,
   onPreviewImageBySku
 }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -49,6 +51,7 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const [showNextSkuDetails, setShowNextSkuDetails] = useState(false);
+  const [hasPlayedBeep, setHasPlayedBeep] = useState(false);
   const speakTimeoutRef = useRef<number | null>(null);
   const checkboxRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -83,14 +86,14 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
 
   // Calculate next orders with same SKU
   const nextSkuNeeds = useMemo((): NextSkuNeeds | null => {
-    if (currentOrderIndex < 0 || currentOrderIndex >= orders.length - 1) {
-      return null;
-    }
-
     const currentSku = order.sku;
-    const remainingOrders = orders.slice(currentOrderIndex + 1);
     
-    const matchingOrders = remainingOrders.filter(o => o.sku === currentSku);
+    // Find ALL orders with the same SKU that are NOT completed and NOT the current order
+    const matchingOrders = orders.filter(o => 
+      o.sku === currentSku && 
+      !o.completed && 
+      !(o.orderNumber === order.orderNumber && o.customerName === order.customerName && o.sku === order.sku)
+    );
     
     if (matchingOrders.length === 0) {
       return null;
@@ -141,7 +144,16 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
     setIsCompleted(order.completed || false);
     setImageError(false);
     setImageLoading(true);
+    setHasPlayedBeep(false); // Reset beep flag when order changes
   }, [order]);
+
+  // Play beep when "PICK EXTRA" message appears
+  useEffect(() => {
+    if (nextSkuNeeds && voiceSettings.beepEnabled && !hasPlayedBeep) {
+      playBeepSound();
+      setHasPlayedBeep(true);
+    }
+  }, [nextSkuNeeds, voiceSettings.beepEnabled, hasPlayedBeep]);
 
   // Automatically read out the order details based on voice settings
   useEffect(() => {
@@ -194,6 +206,43 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
     speakTimeoutRef.current = window.setTimeout(() => {
       window.speechSynthesis.speak(utterance);
     }, 500);
+  };
+
+  const playBeepSound = () => {
+    try {
+      // Create a short beep using Web Audio API
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Configure the beep sound
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime); // 800Hz frequency
+      oscillator.type = 'sine';
+      
+      // Configure volume and fade out
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      // Play the beep for 300ms
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+      
+      console.log('🔊 Played beep sound for PICK EXTRA message');
+    } catch (error) {
+      console.warn('⚠️ Failed to play beep sound:', error);
+      // Fallback: try to use a simple beep if Web Audio API fails
+      try {
+        const utterance = new SpeechSynthesisUtterance('beep');
+        utterance.rate = 2;
+        utterance.volume = 0.3;
+        window.speechSynthesis.speak(utterance);
+      } catch (fallbackError) {
+        console.warn('⚠️ Fallback beep also failed:', fallbackError);
+      }
+    }
   };
 
   const toggleSpeaking = () => {
@@ -385,12 +434,18 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
           )}
 
           {currentOrderBoxName && (
-            <div className={`bg-blue-600 text-white p-3 flex items-center justify-between ${packagingType ? 'border-l border-blue-500' : ''}`}>
+            <div 
+              className={`text-white p-3 flex items-center justify-between ${packagingType ? 'border-l border-opacity-30' : ''}`}
+              style={{ 
+                backgroundColor: currentOrderBoxColor || '#3B82F6',
+                borderLeftColor: currentOrderBoxColor ? `${currentOrderBoxColor}80` : '#3B82F680'
+              }}
+            >
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{getBoxIcon(currentOrderBoxName)}</span>
                 <div>
                   <h3 className="text-lg font-bold">Shipping Box</h3>
-                  <p className="text-blue-100 text-sm">Place in this box</p>
+                  <p className="text-white text-opacity-80 text-sm">Place in this box</p>
                 </div>
               </div>
               <div className="bg-white bg-opacity-20 rounded-lg px-4 py-2">
@@ -578,7 +633,7 @@ export const OrderDisplay: React.FC<OrderDisplayProps> = ({
         {/* Show all items if this is a grouped order */}
         {isGroupedOrder ? (
           <div className="space-y-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 animate-pulse">
               <h4 className="text-md font-semibold text-blue-800 mb-2">Multiple Items Order</h4>
               <p className="text-sm text-blue-700">
                 This order contains {groupedOrderItems.length} different items. All items are shown below for efficient picking.

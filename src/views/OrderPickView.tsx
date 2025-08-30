@@ -78,6 +78,7 @@ export const OrderPickView: React.FC = () => {
     saveCustomBoxNames,
     currentOrderPackagingType,
     currentOrderBoxName,
+    currentOrderBoxColor,
   } = useOrderData();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -261,6 +262,7 @@ export const OrderPickView: React.FC = () => {
                 autoCompleteEnabled={autoCompleteEnabled}
                 packagingType={currentOrderPackagingType}
                currentOrderBoxName={currentOrderBoxName}
+                currentOrderBoxColor={currentOrderBoxColor}
                 onPreviewImageBySku={handlePreviewImageBySku}
               />
             ) : (

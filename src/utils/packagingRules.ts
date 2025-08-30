@@ -33,6 +33,12 @@ function evaluateCondition(order: Order, condition: RuleCondition): boolean {
     case 'shipFromLocation':
       orderValue = order.shipFromLocation;
       break;
+    case 'packageDimension':
+      orderValue = order.packageDimension;
+      break;
+    case 'channelType':
+      orderValue = order.channelType;
+      break;
     default:
       return false;
   }

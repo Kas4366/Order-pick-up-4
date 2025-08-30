@@ -43,6 +43,7 @@ export const useOrderData = () => {
   const [boxRules, setBoxRules] = useState<PackagingRule[]>(defaultBoxRules);
   const [customBoxNames, setCustomBoxNames] = useState<string[]>(defaultBoxNames);
   const [currentOrderBoxName, setCurrentOrderBoxName] = useState<string | null>(null);
+  const [currentOrderBoxColor, setCurrentOrderBoxColor] = useState<string | null>(null);
 
   // Local images folder state
   const [csvImagesFolderHandle, setCsvImagesFolderHandle] = useState<FileSystemDirectoryHandle | null>(null);
@@ -320,9 +321,24 @@ export const useOrderData = () => {
       const boxName = evaluatePackagingRules(currentOrder, boxRules, 'box');
       setCurrentOrderBoxName(boxName);
       console.log('📦 Determined box name for current order:', boxName);
+      
+      // Find the matching box rule to get its color
+      if (boxName) {
+        const matchingBoxRule = boxRules.find(rule => 
+          rule.enabled && 
+          rule.ruleType === 'box' && 
+          rule.resultValue === boxName
+        );
+        const boxColor = matchingBoxRule?.color || '#3B82F6'; // Default to blue
+        setCurrentOrderBoxColor(boxColor);
+        console.log('🎨 Determined box color for current order:', boxColor);
+      } else {
+        setCurrentOrderBoxColor(null);
+      }
     } else {
       setCurrentOrderPackagingType(null);
       setCurrentOrderBoxName(null);
+      setCurrentOrderBoxColor(null);
     }
   }, [currentOrder, packagingRules, boxRules]);
 
@@ -1207,6 +1223,7 @@ export const useOrderData = () => {
     customBoxNames,
     saveCustomBoxNames,
     currentOrderBoxName,
+    currentOrderBoxColor,
     // Other settings
     autoCompleteEnabled,
     saveOtherSettings,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Plus, Edit2, Trash2, Save, X, ArrowUp, ArrowDown, Play, Pause, AlertCircle, CheckCircle, Settings, Box } from 'lucide-react';
+import { Package, Plus, Edit2, Trash2, Save, X, ArrowUp, ArrowDown, Play, Pause, AlertCircle, CheckCircle, Settings, Box, Download, Upload } from 'lucide-react';
 import { PackagingRule, RuleCondition, RuleField, RuleOperator, fieldLabels, operatorLabels, defaultPackagingTypes, defaultPackagingRules, defaultBoxNames, defaultBoxRules, validateRule } from '../types/Packaging';
 
 interface PackagingRulesSettingsProps {
@@ -34,6 +34,9 @@ export const PackagingRulesSettings: React.FC<PackagingRulesSettingsProps> = ({
   const [isManagingBoxes, setIsManagingBoxes] = useState(false);
   const [newPackagingType, setNewPackagingType] = useState('');
   const [newBoxName, setNewBoxName] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importExportMessage, setImportExportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [newRule, setNewRule] = useState<Partial<PackagingRule>>({
     name: '',
     description: '',
@@ -41,7 +44,8 @@ export const PackagingRulesSettings: React.FC<PackagingRulesSettingsProps> = ({
     ruleType: 'packaging',
     resultValue: '',
     priority: 50,
-    enabled: true
+    enabled: true,
+    color: '#3B82F6'
   });
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
@@ -76,6 +80,7 @@ export const PackagingRulesSettings: React.FC<PackagingRulesSettingsProps> = ({
       resultValue: newRule.resultValue!.trim(),
       priority: newRule.priority || 50,
       enabled: newRule.enabled !== false,
+      color: newRule.color || '#3B82F6',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -110,6 +115,7 @@ export const PackagingRulesSettings: React.FC<PackagingRulesSettingsProps> = ({
       resultValue: newRule.resultValue!.trim(),
       priority: newRule.priority || 50,
       enabled: newRule.enabled !== false,
+      color: newRule.color || '#3B82F6',
       updatedAt: new Date().toISOString()
     };
 
@@ -141,7 +147,8 @@ export const PackagingRulesSettings: React.FC<PackagingRulesSettingsProps> = ({
         ruleType: rule.ruleType,
         resultValue: rule.resultValue,
         priority: rule.priority,
-        enabled: rule.enabled
+        enabled: rule.enabled,
+        color: rule.color || '#3B82F6'
       });
       setEditingRuleId(ruleId);
       setEditingRuleType(ruleType);
@@ -289,12 +296,14 @@ export const PackagingRulesSettings: React.FC<PackagingRulesSettingsProps> = ({
       ruleType: 'packaging',
       resultValue: '',
       priority: 50,
-      enabled: true
+      enabled: true,
+      color: '#3B82F6'
     });
     setIsAddingRule(false);
     setEditingRuleId(null);
     setEditingRuleType('packaging');
     setValidationErrors([]);
+    setImportExportMessage(null);
   };
 
   const handleAddCondition = () => {
@@ -333,6 +342,198 @@ export const PackagingRulesSettings: React.FC<PackagingRulesSettingsProps> = ({
       onSaveRules(defaultPackagingRules);
       setLocalBoxRules(defaultBoxRules);
       onSaveBoxRules(defaultBoxRules);
+    }
+  };
+
+  const handleExportRules = async () => {
+    setIsExporting(true);
+    setImportExportMessage(null);
+    
+    try {
+      const allRules = [...localRules, ...localBoxRules];
+      
+      if (allRules.length === 0) {
+        setImportExportMessage({ type: 'error', text: 'No rules to export' });
+        return;
+      }
+
+      // Create CSV content with proper escaping
+      const headers = [
+        'ID', 'Name', 'Description', 'Rule Type', 'Result Value', 'Priority', 
+        'Enabled', 'Color', 'Conditions', 'Created At', 'Updated At'
+      ];
+      
+      const csvContent = [
+        headers.join(','),
+        ...allRules.map(rule => {
+          const safeName = (rule.name || '').replace(/"/g, '""');
+          const safeDescription = (rule.description || '').replace(/"/g, '""');
+          const safeResultValue = (rule.resultValue || '').replace(/"/g, '""');
+          const safeConditions = JSON.stringify(rule.conditions || []).replace(/"/g, '""');
+          
+          return [
+            `"${rule.id || ''}"`,
+            `"${safeName}"`,
+            `"${safeDescription}"`,
+            `"${rule.ruleType || 'packaging'}"`,
+            `"${safeResultValue}"`,
+            rule.priority || 50,
+            rule.enabled ? 'true' : 'false',
+            `"${rule.color || '#3B82F6'}"`,
+            `"${safeConditions}"`,
+            `"${rule.createdAt || ''}"`,
+            `"${rule.updatedAt || ''}"`
+          ].join(',');
+        })
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `packaging-rules-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setImportExportMessage({ 
+        type: 'success', 
+        text: `Successfully exported ${allRules.length} rules to CSV file` 
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      setImportExportMessage({ type: 'error', text: 'Failed to export rules' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportRules = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportExportMessage(null);
+
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        setImportExportMessage({ type: 'error', text: 'Invalid CSV file format' });
+        return;
+      }
+
+      const importedRules: PackagingRule[] = [];
+      let errorCount = 0;
+
+      // Parse CSV manually to handle quoted fields properly
+      const parseCSVLine = (line: string): string[] => {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          const nextChar = line[i + 1];
+          
+          if (char === '"') {
+            if (inQuotes && nextChar === '"') {
+              current += '"';
+              i++; // Skip next quote
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (char === ',' && !inQuotes) {
+            result.push(current);
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        result.push(current);
+        return result;
+      };
+
+      for (let i = 1; i < lines.length; i++) {
+        try {
+          const values = parseCSVLine(lines[i]);
+          if (values.length < 11) continue; // Minimum required columns
+
+          // Parse conditions JSON
+          let conditions: RuleCondition[] = [];
+          try {
+            const conditionsStr = values[8] ? values[8].replace(/^"/, '').replace(/"$/, '').replace(/""/g, '"') : '[]';
+            conditions = JSON.parse(conditionsStr);
+          } catch {
+            conditions = [];
+          }
+
+          const rule: PackagingRule = {
+            id: generateId(), // Generate new ID to prevent conflicts
+            name: (values[1] || '').replace(/^"/, '').replace(/"$/, '').replace(/""/g, '"'),
+            description: (values[2] || '').replace(/^"/, '').replace(/"$/, '').replace(/""/g, '"'),
+            ruleType: (values[3] || 'packaging') as 'packaging' | 'box',
+            resultValue: (values[4] || '').replace(/^"/, '').replace(/"$/, '').replace(/""/g, '"'),
+            priority: parseInt(values[5]) || 50,
+            enabled: (values[6] || 'true') === 'true',
+            color: (values[7] || '#3B82F6').replace(/^"/, '').replace(/"$/, ''),
+            conditions,
+            createdAt: (values[9] || '').replace(/^"/, '').replace(/"$/, '') || new Date().toISOString(),
+            updatedAt: (values[10] || '').replace(/^"/, '').replace(/"$/, '') || new Date().toISOString()
+          };
+
+          // Validate rule
+          const errors = validateRule(rule);
+          if (errors.length === 0) {
+            importedRules.push(rule);
+          } else {
+            console.warn('Skipping invalid rule:', rule.name, errors);
+            errorCount++;
+          }
+        } catch {
+          console.warn('Failed to parse rule at line:', i + 1);
+          errorCount++;
+        }
+      }
+
+      if (importedRules.length === 0) {
+        setImportExportMessage({ type: 'error', text: 'No valid rules found in the CSV file' });
+        return;
+      }
+
+      // Separate packaging and box rules
+      const newPackagingRules = importedRules.filter(r => r.ruleType === 'packaging');
+      const newBoxRules = importedRules.filter(r => r.ruleType === 'box');
+
+      // Add to existing rules
+      if (newPackagingRules.length > 0) {
+        const updatedPackagingRules = [...localRules, ...newPackagingRules];
+        setLocalRules(updatedPackagingRules);
+        onSaveRules(updatedPackagingRules);
+      }
+
+      if (newBoxRules.length > 0) {
+        const updatedBoxRules = [...localBoxRules, ...newBoxRules];
+        setLocalBoxRules(updatedBoxRules);
+        onSaveBoxRules(updatedBoxRules);
+      }
+
+      let message = `Successfully imported ${importedRules.length} rules`;
+      if (errorCount > 0) {
+        message += ` (${errorCount} rules skipped due to errors)`;
+      }
+      
+      setImportExportMessage({ type: 'success', text: message });
+    } catch (error) {
+      console.error('Import error:', error);
+      setImportExportMessage({ type: 'error', text: 'Failed to import rules from CSV file' });
+    } finally {
+      setIsImporting(false);
+      // Reset file input
+      event.target.value = '';
     }
   };
 
@@ -443,6 +644,46 @@ export const PackagingRulesSettings: React.FC<PackagingRulesSettingsProps> = ({
               <p className="text-xs text-gray-500 mt-1">Lower number = higher priority</p>
             </div>
           </div>
+
+          {/* Color Picker for Box Rules */}
+          {newRule.ruleType === 'box' && (
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-700 mb-2">
+                Box Color Theme
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={newRule.color || '#3B82F6'}
+                  onChange={(e) => setNewRule({ ...newRule, color: e.target.value })}
+                  className="w-12 h-8 border border-gray-300 rounded cursor-pointer"
+                />
+                <div className="flex gap-2">
+                  {[
+                    '#EF4444', // Red
+                    '#F59E0B', // Orange  
+                    '#10B981', // Green
+                    '#3B82F6', // Blue
+                    '#8B5CF6', // Purple
+                    '#EC4899', // Pink
+                    '#06B6D4', // Cyan
+                    '#84CC16'  // Lime
+                  ].map(color => (
+                    <button
+                      key={color}
+                      onClick={() => setNewRule({ ...newRule, color })}
+                      className="w-6 h-6 rounded border-2 border-gray-300 hover:scale-110 transition-transform"
+                      style={{ backgroundColor: color }}
+                      title={color}
+                    />
+                  ))}
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                This color will be used for the shipping box banner when this rule applies
+              </p>
+            </div>
+          )}
 
           <div className="mb-4">
             <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -823,6 +1064,13 @@ export const PackagingRulesSettings: React.FC<PackagingRulesSettingsProps> = ({
                     <span className="px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">
                       {rule.resultValue}
                     </span>
+                    {rule.color && (
+                      <div 
+                        className="w-4 h-4 rounded border border-gray-300" 
+                        style={{ backgroundColor: rule.color }}
+                        title={`Box color: ${rule.color}`}
+                      />
+                    )}
                     <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
                       Priority: {rule.priority}
                     </span>
@@ -911,6 +1159,98 @@ export const PackagingRulesSettings: React.FC<PackagingRulesSettingsProps> = ({
         )}
       </div>
 
+      {/* Import/Export Section */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <h4 className="text-md font-semibold text-gray-800 mb-3 flex items-center gap-2">
+          <Settings className="h-4 w-4" />
+          Import/Export Rules
+        </h4>
+        <p className="text-gray-600 text-sm mb-4">
+          Export your packaging and box rules to a CSV file for backup or import rules from another system.
+        </p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Export */}
+          <div className="space-y-3">
+            <h5 className="text-sm font-medium text-gray-700">Export Rules</h5>
+            <p className="text-xs text-gray-600">
+              Download all packaging and box rules as a CSV file.
+            </p>
+            <button
+              onClick={handleExportRules}
+              disabled={isExporting || (localRules.length === 0 && localBoxRules.length === 0)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              {isExporting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  Export Rules ({localRules.length + localBoxRules.length})
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Import */}
+          <div className="space-y-3">
+            <h5 className="text-sm font-medium text-gray-700">Import Rules</h5>
+            <p className="text-xs text-gray-600">
+              Import previously exported rules. New rules will be added to existing ones.
+            </p>
+            <label className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
+              {isImporting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4" />
+                  Import Rules
+                </>
+              )}
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleImportRules}
+                disabled={isImporting}
+                className="hidden"
+              />
+            </label>
+          </div>
+        </div>
+
+        {/* Import/Export Messages */}
+        {importExportMessage && (
+          <div className={`flex items-center gap-2 p-3 rounded-lg mt-4 ${
+            importExportMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          }`}>
+            {importExportMessage.type === 'success' ? <CheckCircle className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+            <span className="text-sm">{importExportMessage.text}</span>
+          </div>
+        )}
+
+        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="text-xs text-blue-800">
+              <p className="font-medium mb-1">Import/Export Notes:</p>
+              <ul className="space-y-1 list-disc list-inside">
+                <li>Export creates a CSV file with all your packaging and box rules</li>
+                <li>Import adds rules to your existing collection (no duplicates by ID)</li>
+                <li>Imported rules get new IDs to prevent conflicts</li>
+                <li>Colors and all rule settings are preserved during import/export</li>
+                <li>Use this feature to backup rules or transfer them between devices</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Usage Instructions */}
       <div className="bg-blue-50 rounded-lg p-4">
         <h4 className="text-sm font-medium text-blue-800 mb-2">How Rules Work:</h4>
@@ -920,8 +1260,6 @@ export const PackagingRulesSettings: React.FC<PackagingRulesSettingsProps> = ({
           <p>3. <strong>Condition Logic:</strong> ALL conditions in a rule must be true for it to match</p>
           <p>4. <strong>First Match Wins:</strong> The first rule that matches determines the result</p>
           <p>5. <strong>Available Fields:</strong> SKU, Quantity, Width, Weight, Location, Order Value, Channel, Ship From Location</p>
-          <p>6. <strong>Box Rule Example:</strong> "If Ship From Location contains 'SM' AND Channel equals 'eBay', then use 'SM OBA'"</p>
-          <p>7. <strong>Packaging Rule Example:</strong> "If SKU contains 'CK003' AND Width ≤ 40, then use 'Large Letter'"</p>
         </div>
       </div>
     </div>

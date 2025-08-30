@@ -45,6 +45,7 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
     { key: 'weight', label: 'Weight (g)', required: false, icon: <Package className="h-4 w-4" />, description: 'Product weight in grams (for packaging rules)' },
     { key: 'itemName', label: 'Item/Product Name', required: false, description: 'Product or item name/title (optional)' },
     { key: 'shipFromLocation', label: 'Ship From Location', required: false, icon: <Truck className="h-4 w-4" />, description: 'Location where the order ships from (for packaging and box rules)' },
+    { key: 'packageDimension', label: 'Package Dimension', required: false, icon: <Package className="h-4 w-4" />, description: 'Package size/dimension information (e.g., Small, Medium, Large) for packaging rules' },
   ];
 
   // Initialize with saved mappings

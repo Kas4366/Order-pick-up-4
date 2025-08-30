@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, Settings, Save, RotateCcw } from 'lucide-react';
+import { Volume2, VolumeX, Settings, Save, RotateCcw, Bell, BellOff } from 'lucide-react';
 import { VoiceSettings, defaultVoiceSettings } from '../types/VoiceSettings';
 
 interface VoiceSettingsProps {
@@ -34,6 +34,10 @@ export const VoiceSettingsComponent: React.FC<VoiceSettingsProps> = ({
 
   const handleEnabledToggle = () => {
     setSettings(prev => ({ ...prev, enabled: !prev.enabled }));
+  };
+
+  const handleBeepToggle = () => {
+    setSettings(prev => ({ ...prev, beepEnabled: !prev.beepEnabled }));
   };
 
   const handleSave = () => {
@@ -103,6 +107,29 @@ export const VoiceSettingsComponent: React.FC<VoiceSettingsProps> = ({
           <span
             className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
               settings.enabled ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Enable/Disable Beep */}
+      <div className="flex items-center justify-between p-4 bg-orange-50 rounded-lg">
+        <div>
+          <h4 className="font-medium text-gray-800 flex items-center gap-2">
+            <Bell className="h-4 w-4 text-orange-600" />
+            Pick Extra Beep Alert
+          </h4>
+          <p className="text-sm text-gray-600">Play beep sound when extra items are needed for same SKU</p>
+        </div>
+        <button
+          onClick={handleBeepToggle}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+            settings.beepEnabled ? 'bg-orange-600' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              settings.beepEnabled ? 'translate-x-6' : 'translate-x-1'
             }`}
           />
         </button>
@@ -227,6 +254,7 @@ export const VoiceSettingsComponent: React.FC<VoiceSettingsProps> = ({
               }</p>
             </>
           )}
+          <p><strong>Pick Extra Beep:</strong> {settings.beepEnabled ? 'Enabled' : 'Disabled'}</p>
         </div>
       </div>
     </div>

@@ -18,6 +18,7 @@ export interface PackagingRule {
   resultValue: string;
   priority: number;
   enabled: boolean;
+  color?: string; // Color theme for box rules
   createdAt: string;
   updatedAt: string;
 }
@@ -57,7 +58,9 @@ export const fieldLabels: Record<RuleField, string> = {
   location: 'Location',
   orderValue: 'Order Value',
   channel: 'Channel',
-  shipFromLocation: 'Ship From Location'
+  shipFromLocation: 'Ship From Location',
+  packageDimension: 'Package Dimension',
+  channelType: 'Channel Type'
 };
 
 export const operatorLabels: Record<RuleOperator, string> = {

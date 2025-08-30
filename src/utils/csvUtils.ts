@@ -373,6 +373,7 @@ export const parseCsvFile = async (
         weight: rawOrder.weight,
         itemName: rawOrder.itemName,
         shipFromLocation: rawOrder.shipFromLocation,
+        packageDimension: rawOrder.packageDimension,
         completed: false,
         _sourceFileName: file.name,
       };
@@ -394,7 +395,8 @@ export const parseCsvFile = async (
         channel: order.channel,
         width: order.width,
         weight: order.weight,
-        itemName: order.itemName
+        itemName: order.itemName,
+        packageDimension: order.packageDimension,
       });
     }
   }
