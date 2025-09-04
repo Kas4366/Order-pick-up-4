@@ -47,7 +47,7 @@ function evaluateCondition(order: Order, condition: RuleCondition): boolean {
   if (orderValue === undefined || orderValue === null) {
     return false;
   }
-  
+
   const conditionValue = condition.value;
   
   // Evaluate based on operator
@@ -110,7 +110,7 @@ function evaluateRule(order: Order, rule: PackagingRule): boolean {
  */
 export function evaluatePackagingRules(order: Order, rules: PackagingRule[], ruleType?: 'packaging' | 'box'): string | null {
   console.log('🔍 Evaluating packaging rules for order:', order.orderNumber, 'SKU:', order.sku);
-  
+    console.log('📦 Order packageDimension value:', order.packageDimension); 
   if (!rules || rules.length === 0) {
     console.log('⚠️ No rules defined for evaluation');
     return null;

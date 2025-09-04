@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, RotateCcw, CheckCircle, Download, Upload, AlertTriangle } from 'lucide-react';
+import { Settings, Save, RotateCcw, CheckCircle, Download, Upload, AlertTriangle, FileText, Package, Trash2 } from 'lucide-react';
 import { archiveService } from '../services/archiveService';
+import { packingInstructionService } from '../services/packingInstructionService';
+import { PackingInstruction } from '../types/PackingInstructions';
 
 interface OtherSettingsProps {
   autoCompleteEnabled: boolean;
@@ -16,12 +18,139 @@ export const OtherSettings: React.FC<OtherSettingsProps> = ({
   });
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isUploadingInstructions, setIsUploadingInstructions] = useState(false);
+  const [instructionsStats, setInstructionsStats] = useState<{ totalInstructions: number; lastUpdated: string } | null>(null);
+  const [lastUploadedFile, setLastUploadedFile] = useState<string>('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     setSettings({ autoCompleteEnabled });
+    loadInstructionsStats();
   }, [autoCompleteEnabled]);
 
+  const loadInstructionsStats = async () => {
+    try {
+      await packingInstructionService.init();
+      const stats = await packingInstructionService.getStats();
+      setInstructionsStats(stats);
+      
+      // Load last uploaded file name from localStorage
+      const savedFileName = localStorage.getItem('lastPackingInstructionsFile');
+      if (savedFileName) {
+        setLastUploadedFile(savedFileName);
+      }
+    } catch (error) {
+      console.error('Failed to load packing instructions stats:', error);
+    }
+  };
+
+  const handleInstructionsUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploadingInstructions(true);
+      setMessage(null);
+
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        setMessage({ type: 'error', text: 'CSV file must have at least a header row and one data row.' });
+        return;
+      }
+
+      // Skip header row and process data
+      const dataLines = lines.slice(1);
+      const instructions: PackingInstruction[] = [];
+      const now = new Date().toISOString();
+
+      for (let i = 0; i < dataLines.length; i++) {
+        const line = dataLines[i].trim();
+        if (!line) continue;
+
+        // Simple CSV parsing - split by comma and handle basic quotes
+        const parts = line.split(',').map(part => part.trim().replace(/^"|"$/g, ''));
+        
+        if (parts.length < 2) {
+          console.warn(`Skipping line ${i + 2}: insufficient columns`);
+          continue;
+        }
+
+        const sku = parts[0].trim();
+        const instruction = parts[1].trim();
+
+        if (!sku || !instruction) {
+          console.warn(`Skipping line ${i + 2}: empty SKU or instruction`);
+          continue;
+        }
+
+        instructions.push({
+          sku,
+          instruction,
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+
+      if (instructions.length === 0) {
+        setMessage({ type: 'error', text: 'No valid instructions found in the CSV file.' });
+        return;
+      }
+
+      // Save instructions to IndexedDB
+      await packingInstructionService.saveInstructions(instructions);
+      
+      // Save file info to localStorage
+      localStorage.setItem('lastPackingInstructionsFile', file.name);
+      localStorage.setItem('lastPackingInstructionsUpload', now);
+      
+      setLastUploadedFile(file.name);
+      await loadInstructionsStats();
+      
+      setMessage({ 
+        type: 'success', 
+        text: `Successfully uploaded ${instructions.length} packing instructions from ${file.name}!` 
+      });
+
+    } catch (error) {
+      console.error('Instructions upload failed:', error);
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to upload packing instructions. Please check the file format.' 
+      });
+    } finally {
+      setIsUploadingInstructions(false);
+      // Reset file input
+      event.target.value = '';
+    }
+  };
+
+  const handleClearInstructions = async () => {
+    if (!confirm('Are you sure you want to clear all packing instructions? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await packingInstructionService.clearInstructions();
+      localStorage.removeItem('lastPackingInstructionsFile');
+      localStorage.removeItem('lastPackingInstructionsUpload');
+      
+      setLastUploadedFile('');
+      await loadInstructionsStats();
+      
+      setMessage({ 
+        type: 'success', 
+        text: 'All packing instructions cleared successfully!' 
+      });
+    } catch (error) {
+      console.error('Failed to clear instructions:', error);
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to clear packing instructions. Please try again.' 
+      });
+    }
+  };
   const handleSave = () => {
     onSaveSettings(settings);
     setMessage({ type: 'success', text: 'Settings saved successfully!' });
@@ -156,7 +285,11 @@ export const OtherSettings: React.FC<OtherSettingsProps> = ({
           completed: values[13] === 'Yes',
           channelType: values[14] || '',
           channel: values[15] || '',
-          packagingType: values[16] || ''
+          width: values[16] ? parseFloat(values[16]) : undefined,
+          weight: values[17] ? parseFloat(values[17]) : undefined,
+          shipFromLocation: values[18] || '',
+          packageDimension: values[19] || '',
+          packagingType: values[20] || ''
         };
 
         orders.push(order);
@@ -230,6 +363,107 @@ export const OtherSettings: React.FC<OtherSettingsProps> = ({
             </p>
           </div>
         )}
+      </div>
+
+      {/* Packing Instructions CSV Upload */}
+      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+        <h4 className="text-md font-semibold text-purple-800 mb-3 flex items-center gap-2">
+          <Package className="h-4 w-4" />
+          Packing Instructions CSV Upload
+        </h4>
+        <p className="text-purple-700 text-sm mb-4">
+          Upload a CSV file with special packing instructions for specific SKUs. The file should have two columns: SKU and Instruction.
+        </p>
+        
+        {/* Current Instructions Info */}
+        {instructionsStats && instructionsStats.totalInstructions > 0 && (
+          <div className="bg-purple-100 border border-purple-300 rounded-lg p-3 mb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-purple-800">
+                  📋 {instructionsStats.totalInstructions} instructions loaded
+                </p>
+                {lastUploadedFile && (
+                  <p className="text-sm text-purple-700">
+                    From: {lastUploadedFile}
+                  </p>
+                )}
+                {instructionsStats.lastUpdated && (
+                  <p className="text-xs text-purple-600">
+                    Last updated: {new Date(instructionsStats.lastUpdated).toLocaleDateString('en-GB')}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Upload */}
+          <div className="space-y-3">
+            <h5 className="text-sm font-medium text-purple-700">Upload Instructions CSV</h5>
+            <p className="text-xs text-purple-600">
+              CSV format: SKU, Instruction (e.g., "ABC123", "Handle with care - fragile item")
+            </p>
+            <label className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
+              {isUploadingInstructions ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4" />
+                  Upload Instructions
+                </>
+              )}
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleInstructionsUpload}
+                disabled={isUploadingInstructions}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          {/* Clear */}
+          <div className="space-y-3">
+            <h5 className="text-sm font-medium text-purple-700">Clear Instructions</h5>
+            <p className="text-xs text-purple-600">
+              Remove all saved packing instructions from the system.
+            </p>
+            <button
+              onClick={handleClearInstructions}
+              disabled={!instructionsStats || instructionsStats.totalInstructions === 0}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="h-4 w-4" />
+              Clear All Instructions
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 p-3 bg-purple-100 border border-purple-200 rounded">
+          <div className="flex items-start gap-2">
+            <FileText className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
+            <div className="text-xs text-purple-800">
+              <p className="font-medium mb-1">CSV Format Example:</p>
+              <div className="bg-white rounded border p-2 font-mono text-xs">
+                <div className="text-gray-600">SKU,Instruction</div>
+                <div className="text-gray-800">ABC123,"Handle with care - fragile glass item"</div>
+                <div className="text-gray-800">XYZ456,"Pack in bubble wrap and mark as fragile"</div>
+                <div className="text-gray-800">DEF789,"Include assembly instructions in package"</div>
+              </div>
+              <ul className="space-y-1 list-disc list-inside mt-2">
+                <li>First column: SKU (must match exactly)</li>
+                <li>Second column: Packing instruction text</li>
+                <li>Instructions will pop up when these SKUs are processed</li>
+                <li>User must acknowledge instructions before continuing</li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Archive Import/Export */}

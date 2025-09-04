@@ -120,10 +120,7 @@ export const useOrderData = () => {
     };
 
     initializeArchive();
-  }
-  )
-
-  // Load saved settings on component mount
+  }, []); // Load saved settings on component mount
   useEffect(() => {
     const savedSelroFolderId = localStorage.getItem('selectedSelroFolderId');
     const savedSelroFolderName = localStorage.getItem('selectedSelroFolderName');
@@ -892,6 +889,10 @@ export const useOrderData = () => {
                 fileDate: archivedOrder.fileDate,
                 channelType: archivedOrder.channelType,
                 channel: archivedOrder.channel,
+                width: archivedOrder.width,
+                weight: archivedOrder.weight,
+                shipFromLocation: archivedOrder.shipFromLocation,
+                packageDimension: archivedOrder.packageDimension,
                 packagingType: archivedOrder.packagingType,
                 completed: archivedOrder.completed || false,
                 selroOrderId: archivedOrder.selroOrderId,
@@ -1047,6 +1048,10 @@ export const useOrderData = () => {
       fileDate: archivedOrder.fileDate,
       channelType: archivedOrder.channelType,
       channel: archivedOrder.channel,
+      width: archivedOrder.width,
+      weight: archivedOrder.weight,
+      shipFromLocation: archivedOrder.shipFromLocation,
+      packageDimension: archivedOrder.packageDimension,
       packagingType: archivedOrder.packagingType,
       completed: archivedOrder.completed || false,
       selroOrderId: archivedOrder.selroOrderId,

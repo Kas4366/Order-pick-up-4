@@ -323,21 +323,46 @@ export const parseCsvFile = async (
     throw new Error('No valid orders found in CSV file. Please check your column mappings and ensure the CSV contains valid data.');
   }
 
-  // Group by order number and customer name, then create individual order items
+  // Enhanced grouping logic: Group by customer name and postcode for merged orders
   const orderGroups = new Map<string, any[]>();
+  const mergedOrderNumbers = new Map<string, Set<string>>(); // Track original order numbers for each group
   
   for (const rawOrder of rawOrders) {
-    // Create a grouping key based on order number AND customer name
-    const groupKey = `${rawOrder.orderNumber}_${rawOrder.customerName}`;
+    let groupKey: string;
+    
+    // If we have a buyer postcode, group by customer name + postcode for merged orders
+    if (rawOrder.buyerPostcode && rawOrder.buyerPostcode.trim() !== '') {
+      groupKey = `${rawOrder.customerName}_${rawOrder.buyerPostcode}`;
+      console.log(`📦 Using merged grouping for ${rawOrder.sku}: customer="${rawOrder.customerName}" + postcode="${rawOrder.buyerPostcode}"`);
+    } else {
+      // Fallback to original logic: group by order number + customer name
+      groupKey = `${rawOrder.orderNumber}_${rawOrder.customerName}`;
+      console.log(`📦 Using original grouping for ${rawOrder.sku}: orderNumber="${rawOrder.orderNumber}" + customer="${rawOrder.customerName}"`);
+    }
     
     if (!orderGroups.has(groupKey)) {
       orderGroups.set(groupKey, []);
+      mergedOrderNumbers.set(groupKey, new Set<string>());
     }
     
     orderGroups.get(groupKey)!.push(rawOrder);
+    
+    // Track the original order number for this group
+    mergedOrderNumbers.get(groupKey)!.add(rawOrder.orderNumber);
   }
 
-  console.log(`📊 Grouped ${rawOrders.length} orders into ${orderGroups.size} order groups`);
+  console.log(`📊 Grouped ${rawOrders.length} orders into ${orderGroups.size} order groups using enhanced logic`);
+  
+  // Log grouping details for debugging
+  for (const [groupKey, groupOrders] of orderGroups.entries()) {
+    const originalOrderNumbers = Array.from(mergedOrderNumbers.get(groupKey) || []);
+    const isMergedGroup = originalOrderNumbers.length > 1;
+    
+    console.log(`📦 Group "${groupKey}": ${groupOrders.length} items from ${originalOrderNumbers.length} original order(s)`);
+    if (isMergedGroup) {
+      console.log(`  🔗 Merged orders: ${originalOrderNumbers.join(', ')}`);
+    }
+  }
 
   // Create final order objects, preserving original CSV order
   const finalOrders: Order[] = [];
@@ -353,11 +378,20 @@ export const parseCsvFile = async (
     // Sort items within each group by original index
     groupOrders.sort((a, b) => a.originalIndex - b.originalIndex);
     
+    // Get all unique order numbers for this group
+    const originalOrderNumbers = Array.from(mergedOrderNumbers.get(groupKey) || []);
+    const mergedOrderNumber = originalOrderNumbers.length > 1 
+      ? originalOrderNumbers.join(', ') 
+      : originalOrderNumbers[0] || groupOrders[0].orderNumber;
+    
     console.log(`📦 Processing group "${groupKey}" with ${groupOrders.length} items`);
+    if (originalOrderNumbers.length > 1) {
+      console.log(`  🔗 Merged order numbers: ${mergedOrderNumber}`);
+    }
     
     for (const rawOrder of groupOrders) {
       const order: Order = {
-        orderNumber: rawOrder.orderNumber,
+        orderNumber: mergedOrderNumber, // Use merged order number
         customerName: rawOrder.customerName,
         sku: rawOrder.sku,
         quantity: rawOrder.quantity,
@@ -381,7 +415,7 @@ export const parseCsvFile = async (
       finalOrders.push(order);
       
       console.log(`✅ Created final order:`, {
-        orderNumber: order.orderNumber,
+        orderNumber: order.orderNumber, // This will now show merged order numbers
         customerName: order.customerName,
         sku: order.sku,
         quantity: order.quantity,
@@ -397,6 +431,8 @@ export const parseCsvFile = async (
         weight: order.weight,
         itemName: order.itemName,
         packageDimension: order.packageDimension,
+        isMergedOrder: originalOrderNumbers.length > 1,
+        originalOrderCount: originalOrderNumbers.length
       });
     }
   }

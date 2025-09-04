@@ -17,8 +17,12 @@ export interface ArchivedOrder {
   // Channel information
   channelType?: string;
   channel?: string;
-  // Packaging information
-  packagingType?: string;
+  // Packaging and shipping information
+  width?: number; // Product width in centimeters
+  weight?: number; // Product weight in grams
+  shipFromLocation?: string; // Location where the order ships from
+  packageDimension?: string; // Package size/dimension information
+  packagingType?: string; // Legacy packaging type field
   selroOrderId?: string;
   selroItemId?: string;
   veeqoOrderId?: string;
