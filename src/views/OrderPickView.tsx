@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ImagePreviewModal } from '../components/ImagePreviewModal';
+import { PackingInstructionModal } from '../components/PackingInstructionModal';
 import { FileUploadArea } from '../components/FileUploadArea';
 import { OrderDisplay } from '../components/OrderDisplay';
 import { NoOrdersState } from '../components/NoOrdersState';
@@ -58,6 +59,10 @@ export const OrderPickView: React.FC = () => {
     imagePreviewModal,
     handlePreviewImageBySku,
     closeImagePreviewModal,
+    // Packing instruction functionality
+    packingInstruction,
+    isPackingInstructionModalOpen,
+    handlePackingInstructionComplete,
     searchMessage,
     setSearchMessage,
     // CSV Images Folder
@@ -246,6 +251,7 @@ export const OrderPickView: React.FC = () => {
                   searchMessage={searchMessage}
                   onClearMessage={() => setSearchMessage('')}
                 />
+                isBlocked={isPackingInstructionModalOpen}
               </div>
             </div>
             
@@ -329,6 +335,12 @@ export const OrderPickView: React.FC = () => {
         sku={imagePreviewModal.sku}
         message={imagePreviewModal.message}
         isLoading={imagePreviewModal.isLoading}
+      />
+
+      <PackingInstructionModal
+        isOpen={isPackingInstructionModalOpen}
+        instruction={packingInstruction}
+        onComplete={handlePackingInstructionComplete}
       />
     </div>
   );

@@ -15,6 +15,8 @@ import { evaluatePackagingRules } from '../utils/packagingRules';
 import { parseCsvFile } from '../utils/csvUtils';
 import { fileHandlePersistenceService } from '../services/fileHandlePersistenceService';
 import { findImageFile } from '../utils/imageUtils';
+import { packingInstructionService } from '../services/packingInstructionService';
+import { PackingInstruction } from '../types/PackingInstructions';
 
 export const useOrderData = () => {
   const [pdfUploaded, setPdfUploaded] = useState(false);
@@ -44,6 +46,10 @@ export const useOrderData = () => {
   const [customBoxNames, setCustomBoxNames] = useState<string[]>(defaultBoxNames);
   const [currentOrderBoxName, setCurrentOrderBoxName] = useState<string | null>(null);
   const [currentOrderBoxColor, setCurrentOrderBoxColor] = useState<string | null>(null);
+
+  // Packing instruction state
+  const [packingInstruction, setPackingInstruction] = useState<PackingInstruction | null>(null);
+  const [isPackingInstructionModalOpen, setIsPackingInstructionModalOpen] = useState(false);
 
   // Local images folder state
   const [csvImagesFolderHandle, setCsvImagesFolderHandle] = useState<FileSystemDirectoryHandle | null>(null);
@@ -339,6 +345,48 @@ export const useOrderData = () => {
     }
   }, [currentOrder, packagingRules, boxRules]);
 
+  // Check for packing instructions when current order changes
+  useEffect(() => {
+    const checkPackingInstructions = async () => {
+      if (currentOrder && currentOrder.sku) {
+        try {
+          console.log(`🔍 Checking for packing instructions for SKU: ${currentOrder.sku}`);
+          
+          // Initialize the service if needed
+          await packingInstructionService.init();
+          
+          // Get instruction for current SKU
+          const instruction = await packingInstructionService.getInstruction(currentOrder.sku);
+          
+          if (instruction) {
+            console.log(`📋 Found packing instruction for SKU ${currentOrder.sku}:`, instruction.instruction);
+            setPackingInstruction(instruction);
+            setIsPackingInstructionModalOpen(true);
+          } else {
+            console.log(`⚠️ No packing instruction found for SKU: ${currentOrder.sku}`);
+            setPackingInstruction(null);
+            setIsPackingInstructionModalOpen(false);
+          }
+        } catch (error) {
+          console.error('❌ Error checking for packing instructions:', error);
+          setPackingInstruction(null);
+          setIsPackingInstructionModalOpen(false);
+        }
+      } else {
+        setPackingInstruction(null);
+        setIsPackingInstructionModalOpen(false);
+      }
+    };
+
+    checkPackingInstructions();
+  }, [currentOrder]);
+
+  // Handle packing instruction completion
+  const handlePackingInstructionComplete = () => {
+    console.log('✅ Packing instruction acknowledged by user');
+    setIsPackingInstructionModalOpen(false);
+    setPackingInstruction(null);
+  };
 
   // Archive orders when they are loaded (with file name extraction)
   const archiveOrdersWithFileName = async (ordersToArchive: Order[], sourceFile?: File) => {
@@ -765,6 +813,12 @@ export const useOrderData = () => {
 
   // Handle QR code scanning - ENHANCED WITH ARCHIVE SEARCH
   const handleQRCodeScan = (qrData: string) => {
+    // Block QR scanning if packing instruction modal is open
+    if (isPackingInstructionModalOpen) {
+      console.log('🚫 QR scan blocked - packing instruction modal is open');
+      return;
+    }
+
     console.log('📱 Processing QR code scan:', qrData);
     
     try {
@@ -802,6 +856,12 @@ export const useOrderData = () => {
 
   // Handle customer search - ENHANCED WITH ARCHIVE SEARCH
   const handleCustomerSearch = async (searchTerm: string) => {
+    // Block search if packing instruction modal is open
+    if (isPackingInstructionModalOpen) {
+      console.log('🚫 Search blocked - packing instruction modal is open');
+      return;
+    }
+
     if (!searchTerm) return;
     
     setSearchMessage(''); // Clear previous message
@@ -940,6 +1000,12 @@ export const useOrderData = () => {
 
   // Handle arrow key navigation
   const handleArrowNavigation = (direction: 'up' | 'down') => {
+    // Block navigation if packing instruction modal is open
+    if (isPackingInstructionModalOpen) {
+      console.log('🚫 Navigation blocked - packing instruction modal is open');
+      return;
+    }
+
     if (orders.length === 0) return;
     
     let newIndex = currentOrderIndex;
@@ -1239,5 +1305,9 @@ export const useOrderData = () => {
     imagePreviewModal,
     handlePreviewImageBySku,
     closeImagePreviewModal,
+    // Packing instruction functionality
+    packingInstruction,
+    isPackingInstructionModalOpen,
+    handlePackingInstructionComplete,
   };
 };

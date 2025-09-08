@@ -19,6 +19,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
   const [searchInput, setSearchInput] = useState('');
   const [searchMode, setSearchMode] = useState<'manual' | 'scanner' | 'arrows'>('manual');
   const [lastScannedPostcode, setLastScannedPostcode] = useState('');
+  const [isBlocked, setIsBlocked] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Auto-focus and select input when switching to scanner mode
@@ -151,11 +152,12 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
           <button
             type="button"
             onClick={() => handleModeChange('manual')}
+            disabled={isBlocked}
             className={`px-3 py-1 text-sm font-medium transition-colors flex items-center gap-1 ${
               searchMode === 'manual'
                 ? 'bg-blue-600 text-white'
                 : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
+            } ${isBlocked ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <Search className="h-3 w-3" />
             Manual
@@ -163,11 +165,12 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
           <button
             type="button"
             onClick={() => handleModeChange('scanner')}
+            disabled={isBlocked}
             className={`px-3 py-1 text-sm font-medium transition-colors flex items-center gap-1 border-l border-gray-300 ${
               searchMode === 'scanner'
                 ? 'bg-blue-600 text-white'
                 : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
+            } ${isBlocked ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <QrCode className="h-3 w-3" />
             Scanner
@@ -175,11 +178,12 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
           <button
             type="button"
             onClick={() => handleModeChange('arrows')}
+            disabled={isBlocked}
             className={`px-3 py-1 text-sm font-medium transition-colors flex items-center gap-1 border-l border-gray-300 ${
               searchMode === 'arrows'
                 ? 'bg-blue-600 text-white'
                 : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
+            } ${isBlocked ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <ArrowUp className="h-3 w-3" />
             <ArrowDown className="h-3 w-3" />
