@@ -193,7 +193,7 @@ export const OtherSettings: React.FC<OtherSettingsProps> = ({
         'Order Number', 'Customer Name', 'SKU', 'Quantity', 'Location', 
         'Buyer Postcode', 'Image URL', 'Item Name', 'Remaining Stock',
         'Order Value', 'File Date', 'File Name', 'Archived At', 'Completed',
-        'Channel Type', 'Channel', 'Packaging Type'
+        'Channel Type', 'Channel', 'Packaging Type', 'Notes'
       ];
 
       const csvContent = [
@@ -215,7 +215,8 @@ export const OtherSettings: React.FC<OtherSettingsProps> = ({
           order.completed ? 'Yes' : 'No',
           `"${order.channelType || ''}"`,
           `"${order.channel || ''}"`,
-          `"${order.packagingType || ''}"`
+          `"${order.packagingType || ''}"`,
+          `"${order.notes || ''}"`
         ].join(','))
       ].join('\n');
 
@@ -289,7 +290,7 @@ export const OtherSettings: React.FC<OtherSettingsProps> = ({
           weight: values[17] ? parseFloat(values[17]) : undefined,
           shipFromLocation: values[18] || '',
           packageDimension: values[19] || '',
-          packagingType: values[20] || ''
+          notes: values[20] || ''
         };
 
         orders.push(order);

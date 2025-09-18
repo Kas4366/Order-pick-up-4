@@ -365,7 +365,10 @@ export const useOrderData = () => {
           } else {
             console.log(`⚠️ No packing instruction found for SKU: ${currentOrder.sku}`);
             setPackingInstruction(null);
-            setIsPackingInstructionModalOpen(false);
+        // Show modal if there's either a packing instruction OR order notes
+        if (instruction || (currentOrder.notes && currentOrder.notes.trim())) {
+          setIsPackingInstructionModalOpen(true);
+        }
           }
         } catch (error) {
           console.error('❌ Error checking for packing instructions:', error);
@@ -1118,6 +1121,7 @@ export const useOrderData = () => {
       weight: archivedOrder.weight,
       shipFromLocation: archivedOrder.shipFromLocation,
       packageDimension: archivedOrder.packageDimension,
+      notes: archivedOrder.notes,
       packagingType: archivedOrder.packagingType,
       completed: archivedOrder.completed || false,
       selroOrderId: archivedOrder.selroOrderId,

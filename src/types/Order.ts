@@ -31,4 +31,6 @@ export interface Order {
   _isLocalImage?: boolean;
   _originalSkuForLocalImage?: string;
   _sourceFileName?: string;
+  // Order notes
+  notes?: string;
 }

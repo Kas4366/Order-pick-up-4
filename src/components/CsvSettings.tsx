@@ -46,6 +46,7 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
     { key: 'itemName', label: 'Item/Product Name', required: false, description: 'Product or item name/title (optional)' },
     { key: 'shipFromLocation', label: 'Ship From Location', required: false, icon: <Truck className="h-4 w-4" />, description: 'Location where the order ships from (for packaging and box rules)' },
     { key: 'packageDimension', label: 'Package Dimension', required: false, icon: <Package className="h-4 w-4" />, description: 'Package size/dimension information (e.g., Small, Medium, Large) for packaging rules' },
+    { key: 'notes', label: 'Notes', required: false, description: 'Special notes or instructions for this order item (will display in blocking modal)' },
   ];
 
   // Initialize with saved mappings
@@ -128,7 +129,8 @@ export const CsvSettings: React.FC<CsvSettingsProps> = ({
         channelType: ['channel type', 'channel_type', 'sales channel', 'sales_channel', 'marketplace', 'platform', 'source'],
         channel: ['channel', 'sales channel name', 'channel name', 'marketplace name', 'platform name'],
         packagingType: ['packaging type', 'packaging_type', 'package type', 'package_type', 'packaging', 'package', 'shipping type', 'shipping_type'],
-        itemName: ['product name', 'product_name', 'item name', 'item_name', 'title', 'product title', 'product_title', 'item title', 'item_title', 'description', 'product description']
+        itemName: ['product name', 'product_name', 'item name', 'item_name', 'title', 'product title', 'product_title', 'item title', 'item_title', 'description', 'product description'],
+        notes: ['notes', 'note', 'special instructions', 'special_instructions', 'order notes', 'order_notes', 'comments', 'remarks', 'instructions']
       };
       
       const variations = headerVariations[field.key] || [field.key];

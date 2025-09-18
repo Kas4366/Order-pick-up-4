@@ -340,6 +340,8 @@ export const OrderPickView: React.FC = () => {
       <PackingInstructionModal
         isOpen={isPackingInstructionModalOpen}
         instruction={packingInstruction}
+        orderNote={currentOrder?.notes}
+        orderNote={currentOrder?.notes}
         onComplete={handlePackingInstructionComplete}
       />
     </div>

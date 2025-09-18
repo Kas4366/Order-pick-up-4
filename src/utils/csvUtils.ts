@@ -162,6 +162,7 @@ export const parseCsvFile = async (
     const weightStr = extractValue('weight');
     const itemName = extractValue('itemName');
     const shipFromLocation = extractValue('shipFromLocation');
+    const notes = extractValue('notes');
 
     console.log(`🔍 Row ${rowNumber} extracted values:`, {
       orderNumber,
@@ -178,7 +179,8 @@ export const parseCsvFile = async (
       channel,
       widthStr,
       weightStr,
-      itemName
+      itemName,
+      notes: notes ? notes.substring(0, 50) + '...' : ''
     });
 
     // Build customer name from first and last name
@@ -294,6 +296,7 @@ export const parseCsvFile = async (
       itemName: itemName,
       shipFromLocation: shipFromLocation,
       originalIndex: i, // Store original CSV row index
+      notes: notes,
     });
 
     console.log(`✅ Row ${rowNumber}: Successfully processed order:`, {
@@ -408,6 +411,7 @@ export const parseCsvFile = async (
         itemName: rawOrder.itemName,
         shipFromLocation: rawOrder.shipFromLocation,
         packageDimension: rawOrder.packageDimension,
+        notes: rawOrder.notes,
         completed: false,
         _sourceFileName: file.name,
       };
@@ -431,6 +435,7 @@ export const parseCsvFile = async (
         weight: order.weight,
         itemName: order.itemName,
         packageDimension: order.packageDimension,
+        notes: order.notes,
         isMergedOrder: originalOrderNumbers.length > 1,
         originalOrderCount: originalOrderNumbers.length
       });

@@ -31,6 +31,7 @@ export interface ArchivedOrder {
     sku: string;
     folderName: string;
   };
+  notes?: string; // Order notes
 }
 
 export interface ArchiveStats {

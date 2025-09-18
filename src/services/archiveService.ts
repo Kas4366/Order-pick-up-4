@@ -105,6 +105,7 @@ class ArchiveService {
               fileName: fileName,
               archivedAt: now,
               fileDate: order.fileDate || now, // Use order's file date or current time as fallback
+              notes: order.notes, // Explicitly include notes
             };
             
             const addRequest = store.add(archivedOrder);
